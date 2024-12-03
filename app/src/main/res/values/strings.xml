@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">LRobozin</string>
+    <string name="accessibility_service_label" translatable="false">LRobozin</string>
+    <string name="accessibility_service_description" translatable="false">This service monitors the values shown in Instacart.</string>
+</resources>
