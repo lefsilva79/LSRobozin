@@ -1,130 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  * activity_main.xml
+  * Data: 2024-12-04
+  * Autor: lefsilva79
+  *
+  * Layout principal do aplicativo com controles de busca e configurações
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
 
-        <!-- Status do Serviço com Indicador -->
-        <LinearLayout
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Status"
+            android:textSize="16sp" />
+
+        <View
+            android:id="@+id/statusIndicator"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:background="@drawable/status_indicator"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint=""
+        app:prefixText="$">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/valueInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
+            android:inputType="number"
+            android:maxLength="3"
+            android:hint="Digite o valor" />
+    </com.google.android.material.textfield.TextInputLayout>
 
-            <View
-                android:id="@+id/statusIndicator"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:background="@drawable/status_indicator"
-                android:layout_marginEnd="8dp"/>
+    <Switch
+        android:id="@+id/monitorSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:minHeight="48dp"
+        android:paddingVertical="12dp"
+        android:text="Monitorar Instacart" />
 
-            <TextView
-                android:id="@+id/statusText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Status: Click on the ENABLE SERVICE button"
-                android:textSize="16sp"/>
-        </LinearLayout>
+    <Switch
+        android:id="@+id/autoClickSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:minHeight="48dp"
+        android:paddingVertical="12dp"
+        android:text="Auto Click" />
 
-        <!-- Campo de Entrada de Valor com $ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
+    <CheckBox
+        android:id="@+id/notificationCheckBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Permitir Notificações" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="$"
-                android:textSize="18sp"
-                android:layout_marginEnd="4dp"/>
+    <CheckBox
+        android:id="@+id/batteryCheckBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Otimização de Bateria" />
 
-            <EditText
-                android:id="@+id/valueInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Enter value"
-                android:inputType="number"
-                android:maxLength="3"
-                android:minHeight="48dp"
-                android:padding="12dp"/>
-        </LinearLayout>
+    <CheckBox
+        android:id="@+id/hibernationCheckBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Hibernação de Apps" />
 
-        <!-- Botões -->
-        <Button
-            android:id="@+id/enableServiceButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="ENABLE SERVICE"
-            android:layout_marginBottom="8dp"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="16dp">
 
         <Button
             android:id="@+id/startButton"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Start"
-            android:enabled="false"
-            android:layout_marginBottom="16dp"/>
+            android:layout_weight="1"
+            android:text="Start" />
 
-        <!-- Checkboxes -->
-        <CheckBox
-            android:id="@+id/checkBoxMonitorInstacart"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Monitor Instacart"
-            android:enabled="false"/>
-
-        <CheckBox
-            android:id="@+id/checkBoxAutoClick"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Auto Click"
-            android:enabled="false"/>
-
-        <CheckBox
-            android:id="@+id/checkBoxBackground"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Background Permission"
-            android:enabled="false"/>
-
-        <CheckBox
-            android:id="@+id/checkBoxBattery"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Battery Optimization"
-            android:enabled="false"/>
-
-        <CheckBox
-            android:id="@+id/checkBoxNotifications"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Notifications"
-            android:enabled="false"/>
-
-        <CheckBox
-            android:id="@+id/checkBoxHibernation"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Prevent Hibernation"
-            android:enabled="false"
-            android:layout_marginBottom="32dp"/>
-
-        <!-- Botão do Tutorial -->
         <Button
-            android:id="@+id/btnShowTutorial"
-            android:layout_width="match_parent"
+            android:id="@+id/stopButton"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Show Setup Tutorial"/>
-
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:enabled="false"
+            android:text="Stop" />
     </LinearLayout>
-</ScrollView>
+
+    <Button
+        android:id="@+id/refreshButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Ativar Refresh" />
+
+    <Button
+        android:id="@+id/setupWizardButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Setup Wizard" />
+</LinearLayout>

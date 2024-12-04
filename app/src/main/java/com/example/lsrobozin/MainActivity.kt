@@ -1,390 +1,500 @@
 package com.example.lsrobozin
 
-import android.accessibilityservice.AccessibilityServiceInfo
-import android.Manifest
-import android.app.ActivityManager
+import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import android.view.View
-import android.view.accessibility.AccessibilityManager
+import android.util.Log
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.Switch
 import android.widget.TextView
-import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AlertDialog
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.lsrobozin.com.example.lsrobozin.AccessibilityInstructionsDialog
-import java.util.*
-import android.graphics.Color
+import android.view.View
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.material.textfield.TextInputLayout
+import android.Manifest.permission.POST_NOTIFICATIONS
 
-class MainActivity : AppCompatActivity(), AccessibilityInstructionsDialog.InstructionsDialogListener {
-
-    private lateinit var valueInput: EditText
+class MainActivity : AppCompatActivity() {
+    // Declaração dos elementos de UI
     private lateinit var startButton: Button
-    private lateinit var enableServiceButton: Button
+    private lateinit var stopButton: Button
+    private lateinit var refreshButton: Button
+    private lateinit var valueInput: EditText
     private lateinit var statusText: TextView
-    private lateinit var checkBoxMonitorInstacart: CheckBox
-    private lateinit var checkBoxAutoClick: CheckBox
-    private lateinit var checkBoxBackground: CheckBox
-    private lateinit var checkBoxBattery: CheckBox
-    private lateinit var checkBoxNotifications: CheckBox
-    private lateinit var checkBoxHibernation: CheckBox
+    private lateinit var monitorSwitch: Switch
+    private lateinit var autoClickSwitch: Switch
+    private lateinit var statusIndicator: View
+    private lateinit var setupWizardButton: Button
+    private lateinit var notificationCheckBox: CheckBox
+    private lateinit var batteryCheckBox: CheckBox
+    private lateinit var hibernationCheckBox: CheckBox
 
-    private var isSearching = false
-    private var showSuccessDialog = false
-    private var targetValue: Int = 0
-    private var allowDuplicates: Boolean = false
-    private var timer: Timer? = null
+    // Variáveis de controle
+    private var refreshManager: RefreshManager? = null
+    private var serviceStarted = false
+    private var hasShownAccessibilityPrompt = false
+    private val handler = Handler(Looper.getMainLooper())
+
+    // Verificação periódica do estado
+    private val checkStateRunnable = object : Runnable {
+        override fun run() {
+            checkSearchState()
+            handler.postDelayed(this, 5000) // Verifica a cada 5 segundos
+        }
+    }
+
+    private val searchStateReceiver = SearchStateReceiver()
+
+    companion object {
+        private const val NOTIFICATION_PERMISSION_CODE = 100
+        private const val TAG = "MainActivity"
+        private const val SEARCH_STATE_ACTION = "com.example.lsrobozin.SEARCH_STATE_CHANGED"
+    }
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        searchStateReceiver.setCallback { isSearching ->
+            updateUIForSearchState(isSearching)
+        }
+
         initializeViews()
-        setupControls()
-        loadSavedState()
+        loadSavedPreferences()
+        setupListeners()
+        handler.post(checkStateRunnable)
+
+        if (!isTaskRoot) {
+            val intent = Intent(this, MainActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            startActivity(intent)
+            finish()
+            return
+        }
     }
 
     private fun initializeViews() {
-        valueInput = findViewById(R.id.valueInput)
         startButton = findViewById(R.id.startButton)
-        enableServiceButton = findViewById(R.id.enableServiceButton)
+        stopButton = findViewById(R.id.stopButton)
+        refreshButton = findViewById(R.id.refreshButton)
+        valueInput = findViewById(R.id.valueInput)
         statusText = findViewById(R.id.statusText)
-        checkBoxMonitorInstacart = findViewById(R.id.checkBoxMonitorInstacart)
-        checkBoxAutoClick = findViewById(R.id.checkBoxAutoClick)
-        checkBoxBackground = findViewById(R.id.checkBoxBackground)
-        checkBoxBattery = findViewById(R.id.checkBoxBattery)
-        checkBoxNotifications = findViewById(R.id.checkBoxNotifications)
-        checkBoxHibernation = findViewById(R.id.checkBoxHibernation)
+        monitorSwitch = findViewById(R.id.monitorSwitch)
+        autoClickSwitch = findViewById(R.id.autoClickSwitch)
+        statusIndicator = findViewById(R.id.statusIndicator)
+        setupWizardButton = findViewById(R.id.setupWizardButton)
+        notificationCheckBox = findViewById(R.id.notificationCheckBox)
+        batteryCheckBox = findViewById(R.id.batteryCheckBox)
+        hibernationCheckBox = findViewById(R.id.hibernationCheckBox)
+
+        startButton.isEnabled = false
+        stopButton.isEnabled = false
+        refreshButton.isEnabled = false
+        monitorSwitch.isEnabled = false
+        autoClickSwitch.isEnabled = false
     }
 
-    private fun setupControls() {
-        setupEnableServiceButton()
-        setupStartButton()
-        setupMonitorInstacartCheckbox()
-        setupAutoClickCheckbox()
-        setupSystemPermissions()
-        setupTutorialButton()
+    private fun loadSavedPreferences() {
+        val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        monitorSwitch.isChecked = prefs.getBoolean("monitor_instacart", false)
+        autoClickSwitch.isChecked = prefs.getBoolean("auto_click", false)
+        valueInput.setText(prefs.getString("last_value", ""))
+        serviceStarted = prefs.getBoolean("service_started", false)
+        notificationCheckBox.isChecked = prefs.getBoolean("notifications_enabled", false)
+        batteryCheckBox.isChecked = prefs.getBoolean("battery_optimization", false)
+        hibernationCheckBox.isChecked = prefs.getBoolean("hibernation", false)
+
+        if (prefs.getBoolean("is_searching", false)) {
+            valueInput.isEnabled = false
+            startButton.isEnabled = false
+            stopButton.isEnabled = true
+        }
     }
 
-    private fun setupTutorialButton() {
-        findViewById<Button>(R.id.btnShowTutorial).setOnClickListener {
+    private fun setupListeners() {
+        startButton.setOnClickListener {
+            handleStartButton()
+        }
+
+        stopButton.setOnClickListener {
+            stopSearching()
+        }
+
+        refreshButton.setOnClickListener {
+            handleRefreshButton()
+        }
+
+        setupWizardButton.setOnClickListener {
             startActivity(Intent(this, SetupWizardActivity::class.java))
         }
-    }
 
+        monitorSwitch.setOnCheckedChangeListener { _, isChecked ->
+            MyAccessibilityService.getInstance()?.setMonitorInstacart(isChecked)
+            savePreference("monitor_instacart", isChecked)
+        }
 
+        autoClickSwitch.setOnCheckedChangeListener { _, isChecked ->
+            MyAccessibilityService.getInstance()?.setInstacartAutoClick(isChecked)
+            savePreference("auto_click", isChecked)
+        }
 
-    private fun loadSavedState() {
-        val prefs = getSharedPreferences("ValorLocator", MODE_PRIVATE)
-        isSearching = prefs.getBoolean("isSearching", false)
-        allowDuplicates = prefs.getBoolean("allow_duplicates", false)
-        targetValue = prefs.getInt("targetValue", 0)
-        updateUIState(isSearching)
-    }
+        notificationCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                checkNotificationPermission()
+            }
+            savePreference("notifications_enabled", isChecked)
+        }
 
-    private fun setupEnableServiceButton() {
-        enableServiceButton.setOnClickListener {
-            showAccessibilityInstructions()
+        batteryCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                checkBatteryOptimization()
+            }
+            savePreference("battery_optimization", isChecked)
+        }
+
+        hibernationCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                checkHibernation()
+            }
+            savePreference("hibernation", isChecked)
         }
     }
 
-    private fun showAccessibilityInstructions() {
-        AccessibilityInstructionsDialog().show(supportFragmentManager, "instructions")
-    }
+    private fun handleStartButton() {
+        val value = valueInput.text.toString().trim()
 
-    override fun onInstructionsUnderstood() {
-        showSuccessDialog = true
-        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-    }
-
-    private fun setupStartButton() {
-        startButton.setOnClickListener {
-            handleStartButtonClick()
-        }
-    }
-
-    private fun handleStartButtonClick() {
-        val valueStr = valueInput.text.toString()
-        if (valueStr.isEmpty()) {
-            valueInput.error = "Enter a value"
+        if (value.isEmpty()) {
+            showToast("Digite um valor para buscar")
             return
         }
 
-        val value = valueStr.toIntOrNull()
-        if (value == null || value <= 0) {
-            valueInput.error = "Invalid value"
-            return
-        }
+        try {
+            val numericValue = value.toInt()
+            if (numericValue > MyAccessibilityService.MAX_VALUE) {
+                showToast("Valor máximo permitido é ${MyAccessibilityService.MAX_VALUE}")
+                return
+            }
 
-        if (!isSearching) {
-            MyAccessibilityService.getInstance()?.startSearching(value)
-            isSearching = true
+            MyAccessibilityService.getInstance()?.let { service ->
+                startButton.isEnabled = false
+                stopButton.isEnabled = true
+                valueInput.isEnabled = false
+                service.startSearching(numericValue)
+                service.setServiceStarted(true)
+                savePreference("last_value", value)
+                savePreference("is_searching", true)
+                updateStatus("Buscando valor: $$value")
+
+                handler.removeCallbacks(checkStateRunnable)
+                handler.post(checkStateRunnable)
+            } ?: run {
+                showAccessibilityPrompt()
+            }
+        } catch (e: NumberFormatException) {
+            showToast("Digite apenas números")
+        }
+    }
+
+    private fun handleRefreshButton() {
+        MyAccessibilityService.getInstance()?.let { service ->
+            refreshButton.isEnabled = false
+            Handler(Looper.getMainLooper()).postDelayed({
+                refreshManager = RefreshManager.getInstance(service)
+                refreshManager?.startRefresh()
+                updateStatus("Refresh iniciado (delay 10s)")
+                refreshButton.isEnabled = true
+            }, 10000)
+            updateStatus("Aguarde 10 segundos para iniciar o refresh...")
+        } ?: run {
+            showAccessibilityPrompt()
+        }
+    }
+
+    private fun stopSearching() {
+        MyAccessibilityService.getInstance()?.let { service ->
+            service.stopSearching()
+            service.setServiceStarted(false)
+            savePreference("is_searching", false)
+            startButton.isEnabled = true
+            stopButton.isEnabled = false
+            valueInput.isEnabled = true
+            updateStatus("Busca interrompida")
+
+            handler.removeCallbacks(checkStateRunnable)
+        }
+    }
+
+    private fun checkSearchState() {
+        val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        val isSearching = prefs.getBoolean("is_searching", false)
+
+        if (isSearching) {
+            valueInput.isEnabled = false
+            startButton.isEnabled = false
+            stopButton.isEnabled = true
+            val lastValue = prefs.getString("last_value", "")
+            updateStatus("Buscando valor: $$lastValue")
+        }
+    }
+
+    private fun updateUIForSearchState(isSearching: Boolean) {
+        valueInput.isEnabled = !isSearching
+        startButton.isEnabled = !isSearching
+        stopButton.isEnabled = isSearching
+
+        if (isSearching) {
+            val lastValue = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+                .getString("last_value", "")
+            updateStatus("Buscando valor: $$lastValue")
         } else {
-            MyAccessibilityService.getInstance()?.stopSearching()
-            isSearching = false
+            updateStatus("Busca interrompida")
         }
-
-        updateUIState(isSearching)
-        saveSearchState()
     }
 
-    private fun saveSearchState() {
-        getSharedPreferences("ValorLocator", MODE_PRIVATE)
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        try {
+            val accessibilityEnabled = Settings.Secure.getInt(
+                contentResolver,
+                Settings.Secure.ACCESSIBILITY_ENABLED
+            )
+
+            if (accessibilityEnabled != 1) return false
+
+            val serviceName = "$packageName/${MyAccessibilityService::class.java.canonicalName}"
+            val enabledServices = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+
+            Log.d(TAG, "Verificando serviço de acessibilidade:")
+            Log.d(TAG, "Nome do serviço: $serviceName")
+            Log.d(TAG, "Serviços habilitados: $enabledServices")
+
+            return enabledServices.split(":")
+                .any { service ->
+                    service.equals(serviceName, ignoreCase = true)
+                }.also { isEnabled ->
+                    Log.d(TAG, "Serviço está ${if (isEnabled) "ativo" else "inativo"}")
+                }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao verificar serviço de acessibilidade", e)
+            return false
+        }
+    }
+
+    private fun checkAccessibilityService() {
+        val enabled = isAccessibilityServiceEnabled()
+        if (!enabled && !hasShownAccessibilityPrompt) {
+            hasShownAccessibilityPrompt = true
+            updateStatus("Serviço de acessibilidade não está ativo")
+            showAccessibilityPrompt()
+        } else {
+            serviceStarted = true
+            savePreference("service_started", true)
+        }
+        updateControlsState(enabled)
+    }
+
+    private fun showAccessibilityPrompt() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        startActivity(intent)
+        showToast("Por favor, ative o serviço de acessibilidade")
+    }
+
+    private fun updateControlsState(serviceEnabled: Boolean) {
+        Log.d(TAG, "Atualizando estado dos controles: serviço ${if (serviceEnabled) "ativo" else "inativo"}")
+
+        val isSearching = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+            .getBoolean("is_searching", false)
+
+        startButton.isEnabled = serviceEnabled && !isSearching
+        stopButton.isEnabled = serviceEnabled && isSearching
+        refreshButton.isEnabled = serviceEnabled
+        monitorSwitch.isEnabled = serviceEnabled
+        autoClickSwitch.isEnabled = serviceEnabled
+        valueInput.isEnabled = !isSearching
+        setupWizardButton.isEnabled = true
+
+        statusIndicator.setBackgroundColor(
+            if (serviceEnabled)
+                ContextCompat.getColor(this, android.R.color.holo_green_light)
+            else
+                ContextCompat.getColor(this, android.R.color.holo_red_light)
+        )
+
+        if (!serviceEnabled) {
+            updateStatus("Serviço de acessibilidade inativo")
+        } else if (isSearching) {
+            val lastValue = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+                .getString("last_value", "")
+            updateStatus("Buscando valor: $$lastValue")
+        } else {
+            updateStatus("Pronto para iniciar")
+        }
+    }
+
+    private fun updateStatus(message: String) {
+        statusText.text = message
+    }
+
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun savePreference(key: String, value: Boolean) {
+        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
             .edit()
-            .putBoolean("isSearching", isSearching)
-            .putInt("targetValue", valueInput.text.toString().toIntOrNull() ?: 0)
+            .putBoolean(key, value)
             .apply()
     }
 
-    private fun setupMonitorInstacartCheckbox() {
-        checkBoxMonitorInstacart.isChecked = getSharedPreferences("ValorLocator", MODE_PRIVATE)
-            .getBoolean("monitor_instacart", false)
+    private fun savePreference(key: String, value: String) {
+        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+            .edit()
+            .putString(key, value)
+            .apply()
+    }
 
-        checkBoxMonitorInstacart.setOnCheckedChangeListener { _, isChecked ->
-            getSharedPreferences("ValorLocator", MODE_PRIVATE)
-                .edit()
-                .putBoolean("monitor_instacart", isChecked)
-                .apply()
-            MyAccessibilityService.getInstance()?.setMonitorInstacart(isChecked)
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    override fun onResume() {
+        super.onResume()
+
+        val filter = IntentFilter(SEARCH_STATE_ACTION)
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(
+                    searchStateReceiver,
+                    filter,
+                    Context.RECEIVER_NOT_EXPORTED
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(searchStateReceiver, filter)
+            }
+
+            val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+            val isSearching = prefs.getBoolean("is_searching", false)
+
+            if (isSearching) {
+                val lastValue = prefs.getString("last_value", "")
+                startButton.isEnabled = false
+                stopButton.isEnabled = true
+                valueInput.isEnabled = false
+                updateStatus("Continuando busca: $lastValue")
+
+                handler.removeCallbacks(checkStateRunnable)
+                handler.post(checkStateRunnable)
+            }
+
+            val enabled = isAccessibilityServiceEnabled()
+            updateControlsState(enabled)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering receiver", e)
         }
     }
 
-    private fun setupAutoClickCheckbox() {
-        checkBoxAutoClick.isChecked = getSharedPreferences("ValorLocator", MODE_PRIVATE)
-            .getBoolean("auto_click", false)
+    override fun onPause() {
+        super.onPause()
+        unregisterReceiver(searchStateReceiver)
+    }
 
-        checkBoxAutoClick.setOnCheckedChangeListener { _, isChecked ->
-            getSharedPreferences("ValorLocator", MODE_PRIVATE)
-                .edit()
-                .putBoolean("auto_click", isChecked)
-                .apply()
-            MyAccessibilityService.getInstance()?.setInstacartAutoClick(isChecked)
+    override fun onNewIntent(intent: Intent) {
+        setIntent(intent)
+        super.onNewIntent(intent)
+        if (!isTaskRoot) {
+            finish()
+            val mainIntent = Intent(this, MainActivity::class.java)
+            mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            startActivity(mainIntent)
         }
     }
 
-    private fun setupSystemPermissions() {
-        setupBackgroundPermission()
-        setupBatteryOptimization()
-        setupNotifications()
-        setupHibernationPrevention()
-    }
-
-    private fun setupBackgroundPermission() {
-        checkBoxBackground.isChecked = isPowerOptimizationIgnored()
-        checkBoxBackground.setOnClickListener {
-            if (checkBoxBackground.isChecked && !isPowerOptimizationIgnored()) {
-                requestBackgroundPermission()
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            NOTIFICATION_PERMISSION_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    showToast("Permissão de notificação concedida")
+                } else {
+                    notificationCheckBox.isChecked = false
+                    showToast("Permissão de notificação negada")
+                }
             }
         }
     }
 
-    private fun requestBackgroundPermission() {
-        val intent = Intent().apply {
-            action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-            data = Uri.parse("package:$packageName")
-        }
-        startActivity(intent)
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacks(checkStateRunnable)
+        refreshManager = null
+        savePreference("service_started", false)
     }
 
-    private fun setupBatteryOptimization() {
-        checkBoxBattery.isChecked = isPowerOptimizationIgnored()
-        checkBoxBattery.setOnClickListener {
-            if (checkBoxBattery.isChecked && !isPowerOptimizationIgnored()) {
-                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_CODE
+                )
+                notificationCheckBox.isChecked = false
+                showToast("Por favor, habilite as notificações")
             }
         }
     }
 
-    private fun setupNotifications() {
-        checkBoxNotifications.isChecked = checkNotificationPermission()
-        checkBoxNotifications.setOnClickListener {
-            if (checkBoxNotifications.isChecked && !checkNotificationPermission() &&
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requestNotificationPermission()
-            }
-        }
-    }
-
-    private fun setupHibernationPrevention() {
-        checkBoxHibernation.isChecked = !isAppHibernated()
-        checkBoxHibernation.setOnClickListener {
-            if (checkBoxHibernation.isChecked && isAppHibernated()) {
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.fromParts("package", packageName, null)
+    private fun checkBatteryOptimization() {
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent().apply {
+                    action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    data = Uri.parse("package:$packageName")
                 }
                 startActivity(intent)
             }
         }
     }
 
-    private fun isPowerOptimizationIgnored(): Boolean {
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        return powerManager.isIgnoringBatteryOptimizations(packageName)
-    }
-
-    private fun isAppHibernated(): Boolean {
+    private fun checkHibernation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val am = getSystemService(ACTIVITY_SERVICE) as ActivityManager
-            return am.isBackgroundRestricted
-        }
-        return false
-    }
-
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun requestNotificationPermission() {
-        val permission = Manifest.permission.POST_NOTIFICATIONS
-        if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(permission), NOTIFICATION_PERMISSION_CODE)
-        }
-    }
-
-    private fun checkNotificationPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            NOTIFICATION_PERMISSION_CODE -> {
-                checkBoxNotifications.isChecked = grantResults.isNotEmpty() &&
-                        grantResults[0] == PackageManager.PERMISSION_GRANTED
+            try {
+                val intent = Intent().apply {
+                    action = "android.settings.APP_HIBERNATION_SETTINGS"
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        updateServiceStatus()
-        updateCheckboxStates()
-        loadPreferences()
-    }
-
-    private fun updateCheckboxStates() {
-        checkBoxBackground.isChecked = isPowerOptimizationIgnored()
-        checkBoxBattery.isChecked = isPowerOptimizationIgnored()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            checkBoxNotifications.isChecked = checkNotificationPermission()
-        }
-        checkBoxHibernation.isChecked = !isAppHibernated()
-    }
-
-    private fun loadPreferences() {
-        val prefs = getSharedPreferences("ValorLocator", MODE_PRIVATE)
-        allowDuplicates = prefs.getBoolean("allow_duplicates", false)
-        isSearching = prefs.getBoolean("isSearching", false)
-        targetValue = prefs.getInt("targetValue", 0)
-
-        if (isSearching && targetValue > 0) {
-            valueInput.setText(targetValue.toString())
-        }
-
-        updateUIState(isSearching)
-    }
-
-    private fun updateUIState(isSearching: Boolean) {
-        startButton.text = if (isSearching) "Stop" else "Start"
-        valueInput.isEnabled = !isSearching
-        val controlsEnabled = true
-        checkBoxMonitorInstacart.isEnabled = controlsEnabled
-        checkBoxAutoClick.isEnabled = controlsEnabled
-        checkBoxBackground.isEnabled = controlsEnabled
-        checkBoxBattery.isEnabled = controlsEnabled
-        checkBoxNotifications.isEnabled = controlsEnabled
-        checkBoxHibernation.isEnabled = controlsEnabled
-    }
-
-    private fun updateServiceStatus() {
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val serviceEnabled = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_GENERIC)
-            .any { it.id.contains("com.example.lsrobozin/.MyAccessibilityService") }
-
-        if (serviceEnabled) {
-            enableServiceEnabled()
-        } else {
-            disableServiceEnabled()
-        }
-    }
-
-    private fun enableServiceEnabled() {
-        val indicator = findViewById<View>(R.id.statusIndicator)
-        indicator.setBackgroundResource(R.drawable.status_indicator)
-        indicator.background.setTint(Color.GREEN) // ou use resources.getColor(android.R.color.holo_green_light)
-        statusText.text = "Status: Service enabled"
-        startButton.isEnabled = true
-        enableServiceButton.visibility = View.GONE
-        valueInput.isEnabled = true
-        setControlsEnabled(true)
-    }
-
-    private fun disableServiceEnabled() {
-        val indicator = findViewById<View>(R.id.statusIndicator)
-        indicator.setBackgroundResource(R.drawable.status_indicator)
-        indicator.background.setTint(Color.RED) // ou use resources.getColor(android.R.color.holo_red_light)
-        statusText.text = "Status: Click on the ENABLE SERVICE button"
-        startButton.isEnabled = false
-        enableServiceButton.visibility = View.VISIBLE
-        valueInput.isEnabled = false
-        setControlsEnabled(false)
-    }
-
-    private fun setControlsEnabled(enabled: Boolean) {
-        checkBoxMonitorInstacart.isEnabled = enabled
-        checkBoxAutoClick.isEnabled = enabled
-        checkBoxBackground.isEnabled = enabled
-        checkBoxBattery.isEnabled = enabled
-        checkBoxNotifications.isEnabled = enabled
-        checkBoxHibernation.isEnabled = enabled
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        // Se estiver procurando, mostre um diálogo de confirmação
-        if (isSearching) {
-            AlertDialog.Builder(this)
-                .setTitle("Warning")
-                .setMessage("Do you want to stop searching and exit the app?")
-                .setPositiveButton("Yes") { _, _ ->
-                    MyAccessibilityService.getInstance()?.stopSearching()
-                    super.onBackPressed()
-                }
-                .setNegativeButton("No", null)
-                .show()
-        } else {
-            // Se não estiver procurando, mostre um diálogo simples
-            AlertDialog.Builder(this)
-                .setTitle("Exit")
-                .setMessage("Do you want to exit the app?")
-                .setPositiveButton("Yes") { _, _ ->
-                    super.onBackPressed()
-                }
-                .setNegativeButton("No", null)
-                .show()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Cancela o timer quando a activity é destruída
-        Timer().cancel()
-    }
-
-    companion object {
-        private const val NOTIFICATION_PERMISSION_CODE = 123
     }
 }
