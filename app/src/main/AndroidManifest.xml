@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  MainActivity.kt
-  Current Date and Time (UTC): 2024-12-04 05:24:56
+  AndroidManifest.xml
+  Current Date and Time (UTC): 2024-12-05 05:05:49
   Current User's Login: lefsilva79
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_APP_HIBERNATION" />
     <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application
         android:allowBackup="true"
@@ -20,6 +22,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:requestLegacyExternalStorage="true"
         android:theme="@style/Theme.LsRobozin">
 
         <service

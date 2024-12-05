@@ -1,6 +1,6 @@
 /*
  * FileLogger.kt
- * Current Date and Time (UTC): 2024-12-05 03:26:59
+ * Current Date and Time (UTC): 2024-12-05 04:44:58
  * Current User's Login: lefsilva79
  */
 
@@ -22,7 +22,8 @@ class FileLogger private constructor(context: Context) {
     private var currentLogFile: File? = null
 
     init {
-        logDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Logs")
+        // Mudando para pasta Downloads
+        logDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "LRobozinLogs")
         if (!logDir.exists()) {
             logDir.mkdirs()
         }

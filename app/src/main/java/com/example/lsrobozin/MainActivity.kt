@@ -1,6 +1,6 @@
 /*
  * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 02:07:37
+ * Current Date and Time (UTC): 2024-12-05 05:01:23
  * Current User's Login: lefsilva79
  *
  * Parte 1: Imports e Inicialização
@@ -33,6 +33,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.textfield.TextInputLayout
 import android.Manifest.permission.POST_NOTIFICATIONS
+import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.annotation.SuppressLint
 import com.example.lsrobozin.utils.LogHelper
 
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity() {
     // Verificação periódica do estado
     private val checkStateRunnable = object : Runnable {
         override fun run() {
+            LogHelper.logEvent("Executando verificação periódica de estado")
             checkSearchState()
             handler.postDelayed(this, 5000) // Verifica a cada 5 segundos
         }
@@ -67,6 +69,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val NOTIFICATION_PERMISSION_CODE = 100
+        private const val STORAGE_PERMISSION_CODE = 101
         private const val TAG = "MainActivity"
         private const val SEARCH_STATE_ACTION = "com.example.lsrobozin.SEARCH_STATE_CHANGED"
     }
@@ -74,10 +77,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        LogHelper.initialize(this)  // Inicializa o LogHelper
-        LogHelper.logEvent("MainActivity criada")
+
+        // Verifica permissão antes de inicializar o logger
+        checkStoragePermission()
 
         searchStateReceiver.setCallback { isSearching ->
+            LogHelper.logEvent("Callback do SearchStateReceiver - isSearching: $isSearching")
             updateUIForSearchState(isSearching)
         }
 
@@ -96,15 +101,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    WRITE_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(WRITE_EXTERNAL_STORAGE),
+                    STORAGE_PERMISSION_CODE
+                )
+            } else {
+                initializeLogger()
+            }
+        } else {
+            initializeLogger()
+        }
+    }
+
+    private fun initializeLogger() {
+        LogHelper.initialize(this)
+        LogHelper.logEvent("MainActivity iniciada")
+    }
+
     /*
  * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 02:08:18
+ * Current Date and Time (UTC): 2024-12-05 05:01:59
  * Current User's Login: lefsilva79
  *
  * Parte 2: Inicialização de Views e Configuração de Listeners
  */
 
     private fun initializeViews() {
+        LogHelper.logEvent("Iniciando inicialização das views")
+
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         valueInput = findViewById(R.id.valueInput)
@@ -121,9 +153,13 @@ class MainActivity : AppCompatActivity() {
         stopButton.isEnabled = false
         monitorSwitch.isEnabled = false
         autoClickSwitch.isEnabled = false
+
+        LogHelper.logEvent("Views inicializadas com estado inicial: botões desabilitados")
     }
 
     private fun loadSavedPreferences() {
+        LogHelper.logEvent("Carregando preferências salvas")
+
         val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
         monitorSwitch.isChecked = prefs.getBoolean("monitor_instacart", false)
         autoClickSwitch.isChecked = prefs.getBoolean("auto_click", false)
@@ -137,10 +173,21 @@ class MainActivity : AppCompatActivity() {
             valueInput.isEnabled = false
             startButton.isEnabled = false
             stopButton.isEnabled = true
+            LogHelper.logEvent("Estado de busca ativo encontrado nas preferências")
         }
+
+        LogHelper.logEvent("""
+            Preferências carregadas:
+            Monitor Instacart: ${monitorSwitch.isChecked}
+            Auto-click: ${autoClickSwitch.isChecked}
+            Último valor: ${valueInput.text}
+            Serviço ativo: $serviceStarted
+        """.trimIndent())
     }
 
     private fun setupListeners() {
+        LogHelper.logEvent("Configurando listeners dos componentes")
+
         startButton.setOnClickListener {
             handleStartButton()
         }
@@ -150,6 +197,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupWizardButton.setOnClickListener {
+            LogHelper.logEvent("Iniciando SetupWizardActivity")
             startActivity(Intent(this, SetupWizardActivity::class.java))
         }
 
@@ -166,6 +214,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         notificationCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            LogHelper.logEvent("Alteração em notificações: $isChecked")
             if (isChecked) {
                 checkNotificationPermission()
             }
@@ -173,6 +222,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         batteryCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            LogHelper.logEvent("Alteração em otimização de bateria: $isChecked")
             if (isChecked) {
                 checkBatteryOptimization()
             }
@@ -180,6 +230,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         hibernationCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            LogHelper.logEvent("Alteração em hibernação: $isChecked")
             if (isChecked) {
                 checkHibernation()
             }
@@ -229,7 +280,7 @@ class MainActivity : AppCompatActivity() {
 
     /*
  * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 02:08:54
+ * Current Date and Time (UTC): 2024-12-05 05:03:09
  * Current User's Login: lefsilva79
  *
  * Parte 3: Gerenciamento de Estado e Ciclo de Vida
@@ -237,7 +288,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopSearching() {
         MyAccessibilityService.getInstance()?.let { service ->
-            LogHelper.logEvent("Parando busca")
+            LogHelper.logEvent("Parando busca manualmente")
             service.stopSearching()
             service.setServiceStarted(false)
             savePreference("is_searching", false)
@@ -251,6 +302,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkSearchState() {
+        LogHelper.logEvent("Verificando estado da busca")
         val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
         val isSearching = prefs.getBoolean("is_searching", false)
 
@@ -260,10 +312,12 @@ class MainActivity : AppCompatActivity() {
             stopButton.isEnabled = true
             val lastValue = prefs.getString("last_value", "")
             updateStatus("Buscando valor: $$lastValue")
+            LogHelper.logEvent("Estado de busca ativo - valor: $lastValue")
         }
     }
 
     private fun updateUIForSearchState(isSearching: Boolean) {
+        LogHelper.logEvent("Atualizando UI para estado de busca: $isSearching")
         valueInput.isEnabled = !isSearching
         startButton.isEnabled = !isSearching
         stopButton.isEnabled = isSearching
@@ -278,6 +332,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
+        LogHelper.logEvent("Verificando status do serviço de acessibilidade")
         try {
             val accessibilityEnabled = Settings.Secure.getInt(
                 contentResolver,
@@ -292,25 +347,22 @@ class MainActivity : AppCompatActivity() {
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
             ) ?: return false
 
-            Log.d(TAG, "Verificando serviço de acessibilidade:")
-            Log.d(TAG, "Nome do serviço: $serviceName")
-            Log.d(TAG, "Serviços habilitados: $enabledServices")
-
             return enabledServices.split(":")
                 .any { service ->
                     service.equals(serviceName, ignoreCase = true)
                 }.also { isEnabled ->
-                    Log.d(TAG, "Serviço está ${if (isEnabled) "ativo" else "inativo"}")
+                    LogHelper.logEvent("Status do serviço de acessibilidade: ${if (isEnabled) "ativo" else "inativo"}")
                 }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao verificar serviço de acessibilidade", e)
+            LogHelper.logError("Verificação do serviço de acessibilidade", e)
             return false
         }
     }
 
     private fun checkAccessibilityService() {
         val enabled = isAccessibilityServiceEnabled()
+        LogHelper.logEvent("Verificando serviço de acessibilidade: $enabled")
         if (!enabled && !hasShownAccessibilityPrompt) {
             hasShownAccessibilityPrompt = true
             updateStatus("Serviço de acessibilidade não está ativo")
@@ -323,6 +375,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAccessibilityPrompt() {
+        LogHelper.logEvent("Mostrando prompt de acessibilidade")
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         startActivity(intent)
         showToast("Por favor, ative o serviço de acessibilidade")
@@ -333,7 +386,7 @@ class MainActivity : AppCompatActivity() {
         Estado dos controles atualizado:
         Serviço ativo: $serviceEnabled
         Buscando: ${getSharedPreferences("ValorLocator", Context.MODE_PRIVATE).getBoolean("is_searching", false)}
-    """.trimIndent())
+        """.trimIndent())
 
         val isSearching = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
             .getBoolean("is_searching", false)
@@ -364,6 +417,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatus(message: String) {
+        LogHelper.logEvent("Status atualizado: $message")
         statusText.text = message
     }
 
@@ -372,6 +426,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun savePreference(key: String, value: Boolean) {
+        LogHelper.logEvent("Salvando preferência: $key = $value")
         getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
             .edit()
             .putBoolean(key, value)
@@ -379,6 +434,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun savePreference(key: String, value: String) {
+        LogHelper.logEvent("Salvando preferência: $key = $value")
         getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
             .edit()
             .putString(key, value)
@@ -388,6 +444,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onResume() {
         super.onResume()
+        LogHelper.logEvent("MainActivity resumida")
 
         val filter = IntentFilter(SEARCH_STATE_ACTION)
 
@@ -419,16 +476,18 @@ class MainActivity : AppCompatActivity() {
             val enabled = isAccessibilityServiceEnabled()
             updateControlsState(enabled)
         } catch (e: Exception) {
-            Log.e(TAG, "Error registering receiver", e)
+            LogHelper.logError("Registro do receiver", e)
         }
     }
 
     override fun onPause() {
+        LogHelper.logEvent("MainActivity pausada")
         super.onPause()
         unregisterReceiver(searchStateReceiver)
     }
 
     override fun onNewIntent(intent: Intent) {
+        LogHelper.logEvent("Novo intent recebido")
         setIntent(intent)
         super.onNewIntent(intent)
         if (!isTaskRoot) {
@@ -446,10 +505,19 @@ class MainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
+            STORAGE_PERMISSION_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    initializeLogger()
+                } else {
+                    Toast.makeText(this, "Permissão de armazenamento necessária para logs", Toast.LENGTH_LONG).show()
+                }
+            }
             NOTIFICATION_PERMISSION_CODE -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    LogHelper.logEvent("Permissão de notificação concedida")
                     showToast("Permissão de notificação concedida")
                 } else {
+                    LogHelper.logEvent("Permissão de notificação negada")
                     notificationCheckBox.isChecked = false
                     showToast("Permissão de notificação negada")
                 }
@@ -458,12 +526,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        LogHelper.logEvent("MainActivity sendo destruída")
         super.onDestroy()
         handler.removeCallbacks(checkStateRunnable)
         savePreference("service_started", false)
     }
 
     private fun checkNotificationPermission() {
+        LogHelper.logEvent("Verificando permissão de notificação")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(
                     this,
@@ -482,6 +552,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkBatteryOptimization() {
+        LogHelper.logEvent("Verificando otimização de bateria")
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
@@ -495,6 +566,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkHibernation() {
+        LogHelper.logEvent("Verificando configurações de hibernação")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val intent = Intent().apply {
@@ -503,6 +575,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(intent)
             } catch (e: Exception) {
+                LogHelper.logError("Acesso às configurações de hibernação", e)
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.parse("package:$packageName")
                 }
@@ -510,4 +583,4 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-}
+} // Fechamento da classe MainActivity
