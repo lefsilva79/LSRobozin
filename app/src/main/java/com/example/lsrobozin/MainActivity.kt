@@ -1,3 +1,11 @@
+/*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 02:07:37
+ * Current User's Login: lefsilva79
+ *
+ * Parte 1: Imports e Inicialização
+ */
+
 package com.example.lsrobozin
 
 import android.accessibilityservice.AccessibilityService
@@ -25,12 +33,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.textfield.TextInputLayout
 import android.Manifest.permission.POST_NOTIFICATIONS
+import android.annotation.SuppressLint
+import com.example.lsrobozin.utils.LogHelper
 
 class MainActivity : AppCompatActivity() {
     // Declaração dos elementos de UI
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
-    private lateinit var refreshButton: Button
     private lateinit var valueInput: EditText
     private lateinit var statusText: TextView
     private lateinit var monitorSwitch: Switch
@@ -42,7 +51,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var hibernationCheckBox: CheckBox
 
     // Variáveis de controle
-    private var refreshManager: RefreshManager? = null
     private var serviceStarted = false
     private var hasShownAccessibilityPrompt = false
     private val handler = Handler(Looper.getMainLooper())
@@ -63,11 +71,11 @@ class MainActivity : AppCompatActivity() {
         private const val SEARCH_STATE_ACTION = "com.example.lsrobozin.SEARCH_STATE_CHANGED"
     }
 
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        LogHelper.initialize(this)  // Inicializa o LogHelper
+        LogHelper.logEvent("MainActivity criada")
 
         searchStateReceiver.setCallback { isSearching ->
             updateUIForSearchState(isSearching)
@@ -79,6 +87,7 @@ class MainActivity : AppCompatActivity() {
         handler.post(checkStateRunnable)
 
         if (!isTaskRoot) {
+            LogHelper.logEvent("Não é task root - redirecionando")
             val intent = Intent(this, MainActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             startActivity(intent)
@@ -87,10 +96,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 02:08:18
+ * Current User's Login: lefsilva79
+ *
+ * Parte 2: Inicialização de Views e Configuração de Listeners
+ */
+
     private fun initializeViews() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
-        refreshButton = findViewById(R.id.refreshButton)
         valueInput = findViewById(R.id.valueInput)
         statusText = findViewById(R.id.statusText)
         monitorSwitch = findViewById(R.id.monitorSwitch)
@@ -103,7 +119,6 @@ class MainActivity : AppCompatActivity() {
 
         startButton.isEnabled = false
         stopButton.isEnabled = false
-        refreshButton.isEnabled = false
         monitorSwitch.isEnabled = false
         autoClickSwitch.isEnabled = false
     }
@@ -134,20 +149,18 @@ class MainActivity : AppCompatActivity() {
             stopSearching()
         }
 
-        refreshButton.setOnClickListener {
-            handleRefreshButton()
-        }
-
         setupWizardButton.setOnClickListener {
             startActivity(Intent(this, SetupWizardActivity::class.java))
         }
 
         monitorSwitch.setOnCheckedChangeListener { _, isChecked ->
+            LogHelper.logEvent("Monitor Instacart ${if (isChecked) "ativado" else "desativado"}")
             MyAccessibilityService.getInstance()?.setMonitorInstacart(isChecked)
             savePreference("monitor_instacart", isChecked)
         }
 
         autoClickSwitch.setOnCheckedChangeListener { _, isChecked ->
+            LogHelper.logEvent("Auto-click ${if (isChecked) "ativado" else "desativado"}")
             MyAccessibilityService.getInstance()?.setInstacartAutoClick(isChecked)
             savePreference("auto_click", isChecked)
         }
@@ -178,6 +191,7 @@ class MainActivity : AppCompatActivity() {
         val value = valueInput.text.toString().trim()
 
         if (value.isEmpty()) {
+            LogHelper.logEvent("Tentativa de início sem valor")
             showToast("Digite um valor para buscar")
             return
         }
@@ -185,11 +199,13 @@ class MainActivity : AppCompatActivity() {
         try {
             val numericValue = value.toInt()
             if (numericValue > MyAccessibilityService.MAX_VALUE) {
+                LogHelper.logEvent("Valor excede máximo permitido: $numericValue")
                 showToast("Valor máximo permitido é ${MyAccessibilityService.MAX_VALUE}")
                 return
             }
 
             MyAccessibilityService.getInstance()?.let { service ->
+                LogHelper.logEvent("Iniciando busca por valor: $numericValue")
                 startButton.isEnabled = false
                 stopButton.isEnabled = true
                 valueInput.isEnabled = false
@@ -202,30 +218,26 @@ class MainActivity : AppCompatActivity() {
                 handler.removeCallbacks(checkStateRunnable)
                 handler.post(checkStateRunnable)
             } ?: run {
+                LogHelper.logEvent("Serviço não disponível - mostrando prompt de acessibilidade")
                 showAccessibilityPrompt()
             }
         } catch (e: NumberFormatException) {
+            LogHelper.logEvent("Erro de formato: valor inválido inserido")
             showToast("Digite apenas números")
         }
     }
 
-    private fun handleRefreshButton() {
-        MyAccessibilityService.getInstance()?.let { service ->
-            refreshButton.isEnabled = false
-            Handler(Looper.getMainLooper()).postDelayed({
-                refreshManager = RefreshManager.getInstance(service)
-                refreshManager?.startRefresh()
-                updateStatus("Refresh iniciado (delay 10s)")
-                refreshButton.isEnabled = true
-            }, 10000)
-            updateStatus("Aguarde 10 segundos para iniciar o refresh...")
-        } ?: run {
-            showAccessibilityPrompt()
-        }
-    }
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 02:08:54
+ * Current User's Login: lefsilva79
+ *
+ * Parte 3: Gerenciamento de Estado e Ciclo de Vida
+ */
 
     private fun stopSearching() {
         MyAccessibilityService.getInstance()?.let { service ->
+            LogHelper.logEvent("Parando busca")
             service.stopSearching()
             service.setServiceStarted(false)
             savePreference("is_searching", false)
@@ -317,14 +329,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateControlsState(serviceEnabled: Boolean) {
-        Log.d(TAG, "Atualizando estado dos controles: serviço ${if (serviceEnabled) "ativo" else "inativo"}")
+        LogHelper.logEvent("""
+        Estado dos controles atualizado:
+        Serviço ativo: $serviceEnabled
+        Buscando: ${getSharedPreferences("ValorLocator", Context.MODE_PRIVATE).getBoolean("is_searching", false)}
+    """.trimIndent())
 
         val isSearching = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
             .getBoolean("is_searching", false)
 
         startButton.isEnabled = serviceEnabled && !isSearching
         stopButton.isEnabled = serviceEnabled && isSearching
-        refreshButton.isEnabled = serviceEnabled
         monitorSwitch.isEnabled = serviceEnabled
         autoClickSwitch.isEnabled = serviceEnabled
         valueInput.isEnabled = !isSearching
@@ -384,7 +399,6 @@ class MainActivity : AppCompatActivity() {
                     Context.RECEIVER_NOT_EXPORTED
                 )
             } else {
-                @Suppress("DEPRECATION")
                 registerReceiver(searchStateReceiver, filter)
             }
 
@@ -446,7 +460,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(checkStateRunnable)
-        refreshManager = null
         savePreference("service_started", false)
     }
 
