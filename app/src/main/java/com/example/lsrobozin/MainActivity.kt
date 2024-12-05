@@ -35,6 +35,7 @@ import com.google.android.material.textfield.TextInputLayout
 import android.Manifest.permission.POST_NOTIFICATIONS
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.annotation.SuppressLint
+import android.os.Environment
 import com.example.lsrobozin.utils.LogHelper
 
 class MainActivity : AppCompatActivity() {
@@ -50,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var notificationCheckBox: CheckBox
     private lateinit var batteryCheckBox: CheckBox
     private lateinit var hibernationCheckBox: CheckBox
+    private lateinit var storageCheckBox: CheckBox
 
     // Variáveis de controle
     private var serviceStarted = false
@@ -74,23 +76,39 @@ class MainActivity : AppCompatActivity() {
         private const val SEARCH_STATE_ACTION = "com.example.lsrobozin.SEARCH_STATE_CHANGED"
     }
 
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 05:15:22
+ * Current User's Login: lefsilva79
+ */
+
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 05:18:52
+ * Current User's Login: lefsilva79
+ */
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Verifica permissão antes de inicializar o logger
-        checkStoragePermission()
+        // Inicialização das views primeiro
+        initializeViews()
 
+        // Callback do receiver
         searchStateReceiver.setCallback { isSearching ->
             LogHelper.logEvent("Callback do SearchStateReceiver - isSearching: $isSearching")
             updateUIForSearchState(isSearching)
         }
 
-        initializeViews()
+        // Carrega preferências e configura listeners
         loadSavedPreferences()
         setupListeners()
+
+        // Inicia verificação periódica
         handler.post(checkStateRunnable)
 
+        // Verifica se é a task root
         if (!isTaskRoot) {
             LogHelper.logEvent("Não é task root - redirecionando")
             val intent = Intent(this, MainActivity::class.java)
@@ -99,25 +117,83 @@ class MainActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // Verifica permissão de armazenamento
+        if (ContextCompat.checkSelfPermission(
+                this,
+                WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED) {
+            initializeLogger()
+        }
     }
 
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 05:23:18
+ * Current User's Login: lefsilva79
+ */
+
     private fun checkStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    WRITE_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(WRITE_EXTERNAL_STORAGE),
-                    STORAGE_PERMISSION_CODE
-                )
-            } else {
+        LogHelper.logEvent("Verificando permissão de armazenamento")
+
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                // Para Android 11 (API 30) e superior
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    LogHelper.logError("Erro ao abrir configurações de armazenamento", e)
+                    // Fallback para configurações gerais de armazenamento
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                // Para Android 6 (API 23) até Android 10 (API 29)
+                if (ContextCompat.checkSelfPermission(
+                        this,
+                        WRITE_EXTERNAL_STORAGE
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(WRITE_EXTERNAL_STORAGE),
+                        STORAGE_PERMISSION_CODE
+                    )
+                } else {
+                    storageCheckBox.isChecked = true
+                    initializeLogger()
+                }
+            }
+            else -> {
+                // Para Android 5.1 (API 22) e inferior
+                storageCheckBox.isChecked = true
                 initializeLogger()
             }
-        } else {
-            initializeLogger()
+        }
+    }
+
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-05 05:25:42
+ * Current User's Login: lefsilva79
+ */
+
+    private fun isStoragePermissionGranted(): Boolean {
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                Environment.isExternalStorageManager()
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+            else -> true
         }
     }
 
@@ -148,6 +224,7 @@ class MainActivity : AppCompatActivity() {
         notificationCheckBox = findViewById(R.id.notificationCheckBox)
         batteryCheckBox = findViewById(R.id.batteryCheckBox)
         hibernationCheckBox = findViewById(R.id.hibernationCheckBox)
+        storageCheckBox = findViewById(R.id.storageCheckBox)
 
         startButton.isEnabled = false
         stopButton.isEnabled = false
@@ -168,6 +245,7 @@ class MainActivity : AppCompatActivity() {
         notificationCheckBox.isChecked = prefs.getBoolean("notifications_enabled", false)
         batteryCheckBox.isChecked = prefs.getBoolean("battery_optimization", false)
         hibernationCheckBox.isChecked = prefs.getBoolean("hibernation", false)
+        storageCheckBox.isChecked = prefs.getBoolean("storage_enabled", false)
 
         if (prefs.getBoolean("is_searching", false)) {
             valueInput.isEnabled = false
@@ -236,7 +314,16 @@ class MainActivity : AppCompatActivity() {
             }
             savePreference("hibernation", isChecked)
         }
+
+        storageCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            LogHelper.logEvent("Alteração em permissão de armazenamento: $isChecked")
+            if (isChecked) {
+                checkStoragePermission()
+            }
+            savePreference("storage_enabled", isChecked)
+        }
     }
+
 
     private fun handleStartButton() {
         val value = valueInput.text.toString().trim()
@@ -446,9 +533,16 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         LogHelper.logEvent("MainActivity resumida")
 
-        val filter = IntentFilter(SEARCH_STATE_ACTION)
-
         try {
+            // Verifica e atualiza o estado da permissão de armazenamento
+            storageCheckBox.isChecked = isStoragePermissionGranted()
+
+            if (isStoragePermissionGranted()) {
+                initializeLogger()
+            }
+
+            val filter = IntentFilter(SEARCH_STATE_ACTION)
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(
                     searchStateReceiver,
@@ -507,9 +601,14 @@ class MainActivity : AppCompatActivity() {
         when (requestCode) {
             STORAGE_PERMISSION_CODE -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    LogHelper.logEvent("Permissão de armazenamento concedida")
+                    storageCheckBox.isChecked = true
                     initializeLogger()
+                    showToast("Permissão de armazenamento concedida")
                 } else {
-                    Toast.makeText(this, "Permissão de armazenamento necessária para logs", Toast.LENGTH_LONG).show()
+                    LogHelper.logEvent("Permissão de armazenamento negada")
+                    storageCheckBox.isChecked = false
+                    showToast("Permissão de armazenamento necessária para logs")
                 }
             }
             NOTIFICATION_PERMISSION_CODE -> {

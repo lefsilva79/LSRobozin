@@ -1,12 +1,13 @@
 /*
  * LogHelper.kt
- * Current Date and Time (UTC): 2024-12-05 03:52:01
+ * Current Date and Time (UTC): 2024-12-05 05:34:08
  * Current User's Login: lefsilva79
  */
 
 package com.example.lsrobozin.utils
 
 import android.content.Context
+import android.os.Environment
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -27,7 +28,7 @@ object LogHelper {
 
     fun initialize(context: Context) {
         fileLogger = FileLogger.getInstance(context)
-        log("=== Log Helper Initialized ===")
+        logEvent("=== Log Helper Initialized ===")
     }
 
     fun log(message: String) {
@@ -83,18 +84,6 @@ object LogHelper {
         """.trimIndent())
     }
 
-    /*
- * LogHelper.kt
- * Current Date and Time (UTC): 2024-12-05 03:53:44
- * Current User's Login: lefsilva79
- */
-
-    /*
- * LogHelper.kt
- * Current Date and Time (UTC): 2024-12-05 03:56:16
- * Current User's Login: lefsilva79
- */
-
     fun logServiceState(service: MyAccessibilityService) {
         log("""
         Service State:
@@ -121,5 +110,68 @@ object LogHelper {
     fun clearLogs() {
         fileLogger?.clearLogs()
         log("=== Logs Cleared ===")
+    }
+
+    private class FileLogger private constructor(context: Context) {
+        private var logFile: File? = null
+        private var fileWriter: FileWriter? = null
+
+        init {
+            try {
+                // Usar a pasta Downloads
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                logFile = File(downloadsDir, "LRobozin_log_$currentDate.txt")
+
+                // Criar o arquivo se não existir
+                if (!logFile!!.exists()) {
+                    logFile!!.createNewFile()
+                }
+
+                fileWriter = FileWriter(logFile, true)
+                Log.d(TAG, "FileLogger initialized. Path: ${logFile?.absolutePath}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing FileLogger: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+
+        fun log(message: String) {
+            try {
+                synchronized(this) {
+                    fileWriter?.apply {
+                        write("$message\n")
+                        flush()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error writing to log file: ${e.message}")
+            }
+        }
+
+        fun getLogFilePath(): String? = logFile?.absolutePath
+
+        fun clearLogs() {
+            try {
+                synchronized(this) {
+                    fileWriter?.close()
+                    logFile?.delete()
+                    logFile?.createNewFile()
+                    fileWriter = FileWriter(logFile, true)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing logs: ${e.message}")
+            }
+        }
+
+        companion object {
+            @Volatile
+            private var instance: FileLogger? = null
+
+            fun getInstance(context: Context): FileLogger =
+                instance ?: synchronized(this) {
+                    instance ?: FileLogger(context).also { instance = it }
+                }
+        }
     }
 }
