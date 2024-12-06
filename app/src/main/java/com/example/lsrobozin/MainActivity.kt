@@ -97,17 +97,6 @@ class MainActivity : AppCompatActivity() {
             hibernationCheckBox = findViewById(R.id.hibernationCheckBox)
             storageCheckBox = findViewById(R.id.storageCheckBox)
 
-            // Criando botão de teste
-            testButton = Button(this)
-            testButton.text = "Testar Instacart"
-            testButton.setOnClickListener {
-                LogHelper.logEvent("Iniciando teste do Instacart")
-                startActivity(Intent(this, TestActivity::class.java))
-            }
-
-            // Adicionando o botão ao layout
-            val rootLayout = findViewById<ViewGroup>(android.R.id.content)
-            rootLayout.addView(testButton)
 
             // Estado inicial dos botões
             startButton.isEnabled = false
@@ -311,6 +300,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /*
+ * MainActivity.kt
+ * Current Date and Time (UTC): 2024-12-06 16:24:56
+ * Current User's Login: lefsilva79
+ */
+
     private fun handleStartButton() {
         val value = valueInput.text.toString().trim()
 
@@ -333,7 +328,7 @@ class MainActivity : AppCompatActivity() {
                 startButton.isEnabled = false
                 stopButton.isEnabled = true
                 valueInput.isEnabled = false
-                service.startSearching(numericValue)
+                service.startSearch(numericValue) // Alterado de startSearching para startSearch
                 service.setServiceStarted(true)
                 savePreference("last_value", value)
                 savePreference("is_searching", true)

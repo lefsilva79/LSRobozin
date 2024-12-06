@@ -42,6 +42,12 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+
+interface AppMonitor {
+    fun searchValues(rootNode: AccessibilityNodeInfo, text: String)
+    fun setEnabled(enabled: Boolean)
+}
+
 class MyAccessibilityService : AccessibilityService() {
     companion object {
         private var instance: MyAccessibilityService? = null
@@ -79,6 +85,8 @@ class MyAccessibilityService : AccessibilityService() {
     private var serviceStarted = false
     private var lastAttemptedClick: Long = 0
     private var clickAttempts = 0
+    // Adicione esta linha junto com os outros atributos privados
+    private var currentMonitor: AppMonitor? = null
 
     private val checkStateRunnable = object : Runnable {
         override fun run() {
@@ -111,6 +119,9 @@ class MyAccessibilityService : AccessibilityService() {
         isSearching = false
         targetValue = 0
         foundValues.clear()
+
+        // Inicializa o monitor
+        instacartMonitor = InstacartMonitor(this, targetValue, foundValues)
 
         // Carregar preferências mas NÃO iniciar monitoramento automático
         val prefs = getSharedPreferences("ValorLocator", MODE_PRIVATE)
@@ -300,40 +311,98 @@ class MyAccessibilityService : AccessibilityService() {
         )
     }
 
+    /*
+ * MyAccessibilityService.kt
+ * Current Date and Time (UTC): 2024-12-06 16:05:03
+ * Current User's Login: lefsilva79
+ */
+
+    /*
+ * MyAccessibilityService.kt
+ * Current Date and Time (UTC): 2024-12-06 16:35:45
+ * Current User's Login: lefsilva79
+ */
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val currentTime = dateFormat.format(Date())
 
         try {
+            val packageName = event.packageName?.toString()
+            val isRelevantPackage = packageName == "com.example.lsrobozin" ||
+                    packageName?.contains("instacart") == true
+
+            LogHelper.logEvent("""
+            [$currentTime] Evento Detalhado:
+            Tipo: ${event.eventType}
+            Package: $packageName
+            IsSearching: $isSearching
+            TargetValue: $targetValue
+            É app relevante?: $isRelevantPackage
+        """.trimIndent())
+
+            if (!isSearching || !isRelevantPackage) return
+
             when (event.eventType) {
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                    LogHelper.logWindowChange(event, event.packageName?.toString())
-                    handleWindowStateChange(event)
+                    LogHelper.logWindowChange(event, packageName)
+                    val rootNode = rootInActiveWindow
+                    if (rootNode != null) {
+                        LogHelper.logEvent("""
+                        Processando window state change
+                        Package: $packageName
+                        Text: ${event.text}
+                        Node Class: ${rootNode.className}
+                    """.trimIndent())
+                        instacartMonitor.searchValues(rootNode, event.text?.toString() ?: "")
+                    } else {
+                        LogHelper.logEvent("rootNode é null para window state")
+                    }
                 }
 
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                     if (shouldProcessContentChange(event)) {
-                        handleContentChange(event)
+                        val rootNode = rootInActiveWindow
+                        if (rootNode != null) {
+                            LogHelper.logEvent("""
+                            Processando window content change
+                            Package: $packageName
+                            Text: ${event.text}
+                            Node Class: ${rootNode.className}
+                        """.trimIndent())
+                            instacartMonitor.searchValues(rootNode, event.text?.toString() ?: "")
+                        } else {
+                            LogHelper.logEvent("rootNode é null para content change")
+                        }
                     }
-                }
-
-                AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                    handleViewClick(event)
                 }
             }
         } catch (e: Exception) {
-            LogHelper.logError("onAccessibilityEvent", e)
-            Log.e(
-                TAG, """
-                [$currentTime] Error processing accessibility event
-                Event type: ${event.eventType}
-                Package: ${event.packageName}
-                Error: ${e.message}
-                Stack trace: ${e.stackTraceToString()}
-            """.trimIndent()
-            )
+            LogHelper.logError("Erro em onAccessibilityEvent", e)
+            e.printStackTrace()
         }
     }
+
+
+
+    // Adicione este novo método
+    private fun checkForValues(event: AccessibilityEvent) {
+        if (isSearching) {
+            LogHelper.logEvent("Verificando valores durante busca ativa")
+
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                LogHelper.logEvent("Root node encontrado")
+                currentMonitor?.let { monitor ->
+                    LogHelper.logEvent("Monitor atual: ${monitor.javaClass.simpleName}")
+                    monitor.searchValues(rootNode, event.text?.toString() ?: "")
+                } ?: LogHelper.logEvent("Monitor atual é nulo")
+            } else {
+                LogHelper.logEvent("Root node é nulo")
+            }
+        }
+    }
+
 
     private fun handleWindowStateChange(event: AccessibilityEvent) {
         val currentTime = dateFormat.format(Date())
@@ -377,25 +446,36 @@ class MyAccessibilityService : AccessibilityService() {
 
     private fun shouldProcessContentChange(event: AccessibilityEvent): Boolean {
         val packageName = event.packageName?.toString() ?: return false
-        val now = System.currentTimeMillis()
-        val lastProcessed = windowCache[packageName] ?: 0L
+        val isRelevantPackage = packageName == "com.example.lsrobozin" ||
+                packageName.contains("instacart")
 
-        // Verifica se já processamos recentemente
-        if (now - lastProcessed < WINDOW_CACHE_TIMEOUT) {
+        if (!isRelevantPackage) {
             return false
         }
 
-        // Atualiza o cache
-        windowCache[packageName] = now
+        val now = System.currentTimeMillis()
+        val lastProcessed = windowCache[packageName] ?: 0L
 
-        // Monitor only Instacart for now
-        if (packageName == "com.instacart.shopper") {
-            return instacartMonitor.isEnabled()
+        LogHelper.logEvent("""
+        Verificando processamento:
+        Package: $packageName
+        É app relevante?: $isRelevantPackage
+        Último processamento: ${if (lastProcessed == 0L) "nunca" else "${now - lastProcessed}ms atrás"}
+        Timeout configurado: $WINDOW_CACHE_TIMEOUT ms
+    """.trimIndent())
+
+        if (now - lastProcessed < WINDOW_CACHE_TIMEOUT) {
+            LogHelper.logEvent("Ignorando evento - muito recente")
+            return false
         }
-        return false
+
+        windowCache[packageName] = now
+        LogHelper.logEvent("Cache atualizado para $packageName")
+        return true
     }
 
     private fun handleContentChange(event: AccessibilityEvent) {
+        LogHelper.logEvent("Handling content change")
         val currentTime = dateFormat.format(Date())
         val packageName = event.packageName?.toString() ?: return
 
@@ -650,42 +730,53 @@ class MyAccessibilityService : AccessibilityService() {
      * - Métodos de controle de monitoramento
      */
 
-    fun startSearching(value: Int) {
-        val currentTime = dateFormat.format(Date())
-        if (value > MAX_VALUE) {
-            Log.e(TAG, "[$currentTime] Invalid value: $value exceeds MAX_VALUE")
-            showNotification("Valor inválido: $value excede o máximo permitido")
+    fun startSearch(value: Int) {
+        LogHelper.logEvent("Iniciando busca por valor: $value")
+
+        // Valida o valor
+        if (value <= 0 || value > MAX_VALUE) {
+            LogHelper.logEvent("Valor inválido para busca: $value")
             return
         }
 
+        // Configura o estado da busca
         targetValue = value
         isSearching = true
         foundValues.clear()
+        clickAttempts = 0
 
-        // Salva o estado
+        // Inicializa/Atualiza o monitor
+        instacartMonitor = InstacartMonitor(this, targetValue, foundValues)
+        instacartMonitor.setEnabled(true)
+
+        // Salva o estado nas preferências
         getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("is_searching", true)
-            .putInt("target_value", value)
+            .putInt("last_value", value)
             .apply()
 
-        // Inicia o monitoramento periódico
+        LogHelper.logEvent("[${dateFormat.format(Date())}] Broadcasting search state:")
+        LogHelper.logEvent("""
+        Searching: $isSearching
+        Target: $targetValue
+        Found: ${foundValues.size}
+    """.trimIndent())
+
+        // Atualiza interface e inicia monitoramento
+        broadcastSearchState(true)
+        showNotification("Buscando valor: $$value")
         handler.post(checkStateRunnable)
 
-        Log.d(
-            TAG, """
-            [$currentTime] Search started
-            Target value: $value
-            Monitor Instacart: $monitorInstacart
-            Auto-click: $instacartAutoClick
-            Allow duplicates: $allowDuplicates
-        """.trimIndent()
-        )
-
-        showNotification("Busca iniciada para o valor: $value")
-        broadcastSearchState(true)
+        // Registra estado do serviço após início da busca
+        LogHelper.logServiceState(this)
     }
 
+    /*
+ * MyAccessibilityService.kt
+ * Current Date and Time (UTC): 2024-12-06 16:17:36
+ * Current User's Login: lefsilva79
+ */
     fun stopSearching() {
         val currentTime = dateFormat.format(Date())
         isSearching = false
@@ -704,10 +795,10 @@ class MyAccessibilityService : AccessibilityService() {
 
         Log.d(
             TAG, """
-            [$currentTime] Search stopped
-            Found values count: ${foundValues.size}
-            Last window: $currentWindow
-        """.trimIndent()
+        [$currentTime] Search stopped
+        Found values count: ${foundValues.size}
+        Last window: $currentWindow
+    """.trimIndent()
         )
 
         showNotification("Busca interrompida")

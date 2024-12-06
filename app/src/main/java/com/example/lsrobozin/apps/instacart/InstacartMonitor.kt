@@ -1,6 +1,6 @@
 /*
  * InstacartMonitor.kt
- * Current Date and Time (UTC): 2024-12-06 05:24:27
+ * Current Date and Time (UTC): 2024-12-06 15:53:24
  * Current User's Login: lefsilva79
  */
 
@@ -20,7 +20,7 @@ import java.util.Locale
 
 class InstacartMonitor(
     private val service: MyAccessibilityService,
-    private val targetValue: Int,
+    private val targetValue: Int,  // Este é o valor mínimo que queremos encontrar
     private val foundValues: MutableSet<Int>
 ) : AppMonitor {
     private var enabled = false
@@ -29,106 +29,106 @@ class InstacartMonitor(
 
     companion object {
         private const val TEXTVIEW_CLASS = "android.widget.TextView"
+        private const val EDITTEXT_CLASS = "android.widget.EditText"
         private const val MAX_DEPTH = 3
         private const val DOLLAR_SIGN = "$"
         private val MONEY_PATTERN = """\$(\d+)(?:\.\d{2})?""".toRegex()
     }
 
+    /*
+ * InstacartMonitor.kt
+ * Current Date and Time (UTC): 2024-12-06 16:37:22
+ * Current User's Login: lefsilva79
+ */
+
     override fun searchValues(node: AccessibilityNodeInfo, nodeText: String) {
-        if (!enabled) return
+        LogHelper.log("""
+        === INÍCIO DO SEARCHVALUES ===
+        Monitor enabled: $enabled
+        Target Value: $targetValue
+        Node Package: ${node.packageName}
+        Node Class: ${node.className}
+        Node Text: $nodeText
+        AutoClick: $autoClickEnabled
+    """.trimIndent())
+
+        if (!enabled) {
+            LogHelper.logEvent("Monitor está desabilitado, retornando...")
+            return
+        }
 
         foundValues.clear()
         val currentTime = dateFormat.format(Date())
 
-        LogHelper.logEvent("""
-            [$currentTime] === Nova busca iniciada ===
-            Alvo: $targetValue | AutoClick: $autoClickEnabled
-            
-            === Hierarquia do Node ===
-            ${dumpNodeHierarchy(node)}
-        """.trimIndent())
+        // Testa o node recebido diretamente
+        node.text?.toString()?.let { text ->
+            LogHelper.logEvent("Analisando texto do node principal: '$text'")
+            if (text.contains("$")) {
+                LogHelper.logEvent("$ encontrado no node principal: $text")
+                searchInText(text, MONEY_PATTERN, node)
+            }
+        }
 
-        // Busca por TextViews e elementos com $
+        // Busca em todos os children
         val textViews = findNodesByClassName(node, TEXTVIEW_CLASS)
-        val dollarNodes = findNodesByText(node, DOLLAR_SIGN, exactMatch = false)
+        val editTexts = findNodesByClassName(node, EDITTEXT_CLASS)
 
-        LogHelper.logEvent("""
-            TextViews encontrados: ${textViews.size}
-            Nodes com $: ${dollarNodes.size}
-        """.trimIndent())
+        LogHelper.log("""
+        Elementos encontrados:
+        TextViews: ${textViews.size}
+        EditTexts: ${editTexts.size}
+        Package: ${node.packageName}
+    """.trimIndent())
 
-        // Processa todos os nodes encontrados
-        (textViews + dollarNodes).distinct().forEach { foundNode ->
-            foundNode.text?.toString()?.let { nodeText ->
-                searchInText(nodeText, MONEY_PATTERN, foundNode)
+        (textViews + editTexts).forEach { foundNode ->
+            foundNode.text?.toString()?.let { text ->
+                LogHelper.logEvent("Analisando elemento: '$text'")
+                if (text.contains("$") && text.indexOf("$").let { i ->
+                        i < text.length - 1 && text[i + 1].isDigit()
+                    }) {
+                    LogHelper.logEvent("Padrão $ + número encontrado: $text")
+                    searchInText(text, MONEY_PATTERN, foundNode)
+                }
             }
         }
     }
 
     private fun searchInText(text: String, pattern: Regex, node: AccessibilityNodeInfo) {
         try {
-            LogHelper.logEvent("""
-                Analisando texto: '$text'
-                Class: ${node.className}
-                ViewId: ${node.viewIdResourceName}
-                Clickable: ${node.isClickable}
-                Bounds: ${node.getBoundsInScreen(Rect())}
-            """.trimIndent())
+            LogHelper.log("""
+            === ANÁLISE DETALHADA DE TEXTO ===
+            Texto: '$text'
+            Package: ${node.packageName}
+            Class: ${node.className}
+            ViewId: ${node.viewIdResourceName}
+            Clickable: ${node.isClickable}
+            Enabled: ${node.isEnabled}
+            Visible: ${node.isVisibleToUser}
+            Procurando valores >= $targetValue
+        """.trimIndent())
 
             pattern.findAll(text).forEach { match ->
-                val fullMatch = match.value
-                val numericValue = match.groupValues[1]
+                LogHelper.logEvent("Match encontrado: '${match.value}'")
 
-                LogHelper.logEvent("""
-                    Match encontrado:
-                    Texto completo: $fullMatch
-                    Valor numérico: $numericValue
-                """.trimIndent())
+                if (match.value.startsWith("$") && match.value[1].isDigit()) {
+                    val numericValue = match.groupValues[1]
+                    LogHelper.logEvent("Valor extraído: $numericValue")
 
-                numericValue.toIntOrNull()?.let { value ->
-                    LogHelper.logEvent("Valor convertido: $value")
-                    processFoundValue(value, node)
+                    numericValue.toIntOrNull()?.let { value ->
+                        LogHelper.logValueDetection(value, text, value >= targetValue)
+
+                        if (value >= targetValue) {
+                            LogHelper.logEvent("Valor válido encontrado: $value (>= $targetValue)")
+                            processFoundValue(value, node)
+                        } else {
+                            LogHelper.logEvent("Valor ignorado: $value (< $targetValue)")
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
-            LogHelper.logError("Erro ao processar: $text", e)
+            LogHelper.logError("Processamento de texto", e)
         }
-    }
-
-    private fun findNodesByText(
-        rootNode: AccessibilityNodeInfo?,
-        text: String,
-        exactMatch: Boolean = true
-    ): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-        if (rootNode == null) return nodes
-
-        val searchText = text.trim()
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(rootNode)
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            val nodeText = node.text?.toString()?.trim()
-
-            if (nodeText != null) {
-                val matches = if (exactMatch) {
-                    nodeText == searchText
-                } else {
-                    nodeText.contains(searchText, ignoreCase = true)
-                }
-
-                if (matches) {
-                    nodes.add(node)
-                }
-            }
-
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
-            }
-        }
-
-        return nodes
     }
 
     private fun findNodesByClassName(
@@ -198,15 +198,16 @@ class InstacartMonitor(
         val currentTime = dateFormat.format(Date())
 
         LogHelper.logEvent("""
-            [$currentTime] Processando valor encontrado:
+            [$currentTime] Valor encontrado:
             Valor: $rawValue
-            Alvo: $targetValue
+            Alvo mínimo: $targetValue
             Node Info:
             ${dumpNodeHierarchy(node, maxDepth = 2)}
         """.trimIndent())
 
-        if (rawValue >= targetValue && rawValue <= MyAccessibilityService.MAX_VALUE) {
-            LogHelper.logEvent("Valor válido encontrado: $rawValue")
+        // Aqui já sabemos que rawValue >= targetValue
+        if (rawValue <= MyAccessibilityService.MAX_VALUE) {
+            LogHelper.logEvent("Valor aceito: $rawValue")
             if (autoClickEnabled) {
                 handleAutoClick(rawValue, node)
             } else {
@@ -214,7 +215,7 @@ class InstacartMonitor(
                 service.showNotification("Shopper: $$rawValue encontrado!")
             }
         } else {
-            LogHelper.logEvent("Valor descartado: $rawValue (fora dos limites)")
+            LogHelper.logEvent("Valor muito alto: $rawValue")
         }
     }
 
@@ -255,7 +256,9 @@ class InstacartMonitor(
     override fun isEnabled() = enabled
 
     override fun setEnabled(enabled: Boolean) {
+        LogHelper.logEvent("Monitor setEnabled chamado com: $enabled")
         this.enabled = enabled
+        LogHelper.logEvent("==== MONITOR STATUS CHANGED ====")
         LogHelper.logEvent("Monitor ${if (enabled) "habilitado" else "desabilitado"}")
     }
 
