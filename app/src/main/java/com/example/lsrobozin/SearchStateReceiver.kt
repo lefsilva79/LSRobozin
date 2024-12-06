@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.annotation.SuppressLint
 
-@SuppressLint("UnsafeIntentLaunch", "UnspecifiedRegisterReceiverFlag")
+
 class SearchStateReceiver : BroadcastReceiver() {
     private var callback: ((Boolean) -> Unit)? = null
 

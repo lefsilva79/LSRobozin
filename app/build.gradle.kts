@@ -54,6 +54,12 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.cardview:cardview:1.0.0")
+
+    implementation("androidx.core:core:1.12.0")
+    // Se precisar de suporte específico para Accessibility
+    implementation("androidx.core:core-ktx:1.12.0")
 
     // Material Design and ConstraintLayout
     implementation("com.google.android.material:material:1.11.0")

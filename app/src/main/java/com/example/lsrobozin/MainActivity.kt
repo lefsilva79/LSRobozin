@@ -1,9 +1,7 @@
 /*
  * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:01:23
+ * Current Date and Time (UTC): 2024-12-06 06:04:20
  * Current User's Login: lefsilva79
- *
- * Parte 1: Imports e Inicialização
  */
 
 package com.example.lsrobozin
@@ -36,6 +34,7 @@ import android.Manifest.permission.POST_NOTIFICATIONS
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.annotation.SuppressLint
 import android.os.Environment
+import android.view.ViewGroup
 import com.example.lsrobozin.utils.LogHelper
 
 class MainActivity : AppCompatActivity() {
@@ -52,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var batteryCheckBox: CheckBox
     private lateinit var hibernationCheckBox: CheckBox
     private lateinit var storageCheckBox: CheckBox
+    private lateinit var testButton: Button
 
     // Variáveis de controle
     private var serviceStarted = false
@@ -76,23 +76,48 @@ class MainActivity : AppCompatActivity() {
         private const val SEARCH_STATE_ACTION = "com.example.lsrobozin.SEARCH_STATE_CHANGED"
     }
 
-    /*
- * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:15:22
- * Current User's Login: lefsilva79
- */
-
-    /*
- * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:18:52
- * Current User's Login: lefsilva79
- */
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         // Inicialização das views primeiro
+        fun initializeViews() {
+            LogHelper.logEvent("Iniciando inicialização das views")
+
+            startButton = findViewById(R.id.startButton)
+            stopButton = findViewById(R.id.stopButton)
+            valueInput = findViewById(R.id.valueInput)
+            statusText = findViewById(R.id.statusText)
+            monitorSwitch = findViewById(R.id.monitorSwitch)
+            autoClickSwitch = findViewById(R.id.autoClickSwitch)
+            statusIndicator = findViewById(R.id.statusIndicator)
+            setupWizardButton = findViewById(R.id.setupWizardButton)
+            notificationCheckBox = findViewById(R.id.notificationCheckBox)
+            batteryCheckBox = findViewById(R.id.batteryCheckBox)
+            hibernationCheckBox = findViewById(R.id.hibernationCheckBox)
+            storageCheckBox = findViewById(R.id.storageCheckBox)
+
+            // Criando botão de teste
+            testButton = Button(this)
+            testButton.text = "Testar Instacart"
+            testButton.setOnClickListener {
+                LogHelper.logEvent("Iniciando teste do Instacart")
+                startActivity(Intent(this, TestActivity::class.java))
+            }
+
+            // Adicionando o botão ao layout
+            val rootLayout = findViewById<ViewGroup>(android.R.id.content)
+            rootLayout.addView(testButton)
+
+            // Estado inicial dos botões
+            startButton.isEnabled = false
+            stopButton.isEnabled = false
+            monitorSwitch.isEnabled = false
+            autoClickSwitch.isEnabled = false
+
+            LogHelper.logEvent("Views inicializadas com estado inicial: botões desabilitados")
+        }
+
         initializeViews()
 
         // Callback do receiver
@@ -128,10 +153,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     /*
- * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:23:18
- * Current User's Login: lefsilva79
- */
+        * MainActivity.kt
+        * Current Date and Time (UTC): 2024-12-06 06:08:23
+        * Current User's Login: lefsilva79
+        */
 
     private fun checkStoragePermission() {
         LogHelper.logEvent("Verificando permissão de armazenamento")
@@ -176,12 +201,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /*
- * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:25:42
- * Current User's Login: lefsilva79
- */
-
     private fun isStoragePermissionGranted(): Boolean {
         return when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
@@ -200,38 +219,6 @@ class MainActivity : AppCompatActivity() {
     private fun initializeLogger() {
         LogHelper.initialize(this)
         LogHelper.logEvent("MainActivity iniciada")
-    }
-
-    /*
- * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:01:59
- * Current User's Login: lefsilva79
- *
- * Parte 2: Inicialização de Views e Configuração de Listeners
- */
-
-    private fun initializeViews() {
-        LogHelper.logEvent("Iniciando inicialização das views")
-
-        startButton = findViewById(R.id.startButton)
-        stopButton = findViewById(R.id.stopButton)
-        valueInput = findViewById(R.id.valueInput)
-        statusText = findViewById(R.id.statusText)
-        monitorSwitch = findViewById(R.id.monitorSwitch)
-        autoClickSwitch = findViewById(R.id.autoClickSwitch)
-        statusIndicator = findViewById(R.id.statusIndicator)
-        setupWizardButton = findViewById(R.id.setupWizardButton)
-        notificationCheckBox = findViewById(R.id.notificationCheckBox)
-        batteryCheckBox = findViewById(R.id.batteryCheckBox)
-        hibernationCheckBox = findViewById(R.id.hibernationCheckBox)
-        storageCheckBox = findViewById(R.id.storageCheckBox)
-
-        startButton.isEnabled = false
-        stopButton.isEnabled = false
-        monitorSwitch.isEnabled = false
-        autoClickSwitch.isEnabled = false
-
-        LogHelper.logEvent("Views inicializadas com estado inicial: botões desabilitados")
     }
 
     private fun loadSavedPreferences() {
@@ -324,7 +311,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     private fun handleStartButton() {
         val value = valueInput.text.toString().trim()
 
@@ -364,14 +350,6 @@ class MainActivity : AppCompatActivity() {
             showToast("Digite apenas números")
         }
     }
-
-    /*
- * MainActivity.kt
- * Current Date and Time (UTC): 2024-12-05 05:03:09
- * Current User's Login: lefsilva79
- *
- * Parte 3: Gerenciamento de Estado e Ciclo de Vida
- */
 
     private fun stopSearching() {
         MyAccessibilityService.getInstance()?.let { service ->

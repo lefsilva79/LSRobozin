@@ -1,6 +1,6 @@
 /*
  * MyAccessibilityService.kt
- * Current Date and Time (UTC): 2024-12-05 02:29:05
+ * Current Date and Time (UTC): 2024-12-06 01:11:49
  * Current User's Login: lefsilva79
  *
  * Parte 1: Configuração inicial e setup do serviço
@@ -34,13 +34,13 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.example.lsrobozin.apps.instacart.InstacartMonitor
+import com.example.lsrobozin.apps.InstacartMonitor
+
 import com.example.lsrobozin.utils.LogHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-
 
 class MyAccessibilityService : AccessibilityService() {
     companion object {
@@ -64,7 +64,6 @@ class MyAccessibilityService : AccessibilityService() {
 
     private lateinit var instacartMonitor: InstacartMonitor
     private lateinit var notificationManager: NotificationManager
-
 
     private val handler = Handler(Looper.getMainLooper())
     private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -101,31 +100,6 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun ensureServiceRunning() {
-        val currentTime = dateFormat.format(Date())
-        val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("is_searching", false)) {
-            isSearching = true
-            targetValue = prefs.getInt("target_value", 0)
-            monitorInstacart = prefs.getBoolean("monitor_instacart", false)
-            allowDuplicates = prefs.getBoolean("allow_duplicates", false)
-            Log.d(
-                TAG, """
-                [$currentTime] Restored search state:
-                Target: $targetValue
-                Monitor: $monitorInstacart
-                Allow Duplicates: $allowDuplicates
-            """.trimIndent()
-            )
-            handler.post(checkStateRunnable)
-        }
-    }
-
-    /*
-     * Current Date and Time (UTC): 2024-12-05 03:48:29
-     * Current User's Login: lefsilva79
-     */
-
     override fun onCreate() {
         super.onCreate()
         LogHelper.initialize(this)
@@ -139,7 +113,7 @@ class MyAccessibilityService : AccessibilityService() {
         foundValues.clear()
 
         // Carregar preferências mas NÃO iniciar monitoramento automático
-        val prefs = getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("ValorLocator", MODE_PRIVATE)
         monitorInstacart = prefs.getBoolean("monitor_instacart", false)
         instacartAutoClick = prefs.getBoolean("auto_click", false)
         allowDuplicates = prefs.getBoolean("allow_duplicates", false)
@@ -177,7 +151,7 @@ class MyAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(checkStateRunnable)
 
         // Limpa o estado do serviço
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("service_started", false)
             .putBoolean("monitor_instacart", false)
@@ -200,7 +174,7 @@ class MyAccessibilityService : AccessibilityService() {
                 setShowBadge(true)
             }
             notificationManager =
-                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
     }
@@ -208,7 +182,7 @@ class MyAccessibilityService : AccessibilityService() {
     fun setMonitorInstacart(enabled: Boolean) {
         val currentTime = dateFormat.format(Date())
         monitorInstacart = enabled
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("monitor_instacart", enabled)
             .apply()
@@ -218,7 +192,7 @@ class MyAccessibilityService : AccessibilityService() {
     fun setInstacartAutoClick(enabled: Boolean) {
         val currentTime = dateFormat.format(Date())
         instacartAutoClick = enabled
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("auto_click", enabled)
             .apply()
@@ -228,7 +202,7 @@ class MyAccessibilityService : AccessibilityService() {
     fun setAllowDuplicates(enabled: Boolean) {
         val currentTime = dateFormat.format(Date())
         allowDuplicates = enabled
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("allow_duplicates", enabled)
             .apply()
@@ -239,7 +213,7 @@ class MyAccessibilityService : AccessibilityService() {
     fun getInstacartAutoClick(): Boolean = instacartAutoClick
     fun getAllowDuplicates(): Boolean = allowDuplicates
 
-    @SuppressLint("MissingPermission")
+
     fun showNotification(message: String) {
         try {
             val currentTime = dateFormat.format(Date())
@@ -282,165 +256,49 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    /*
- * Current Date and Time (UTC): 2024-12-05 03:39:16
- * Current User's Login: lefsilva79
- */
-
-    fun tryClickAndVerify(node: AccessibilityNodeInfo, value: Int): Boolean {
-        val startTime = System.currentTimeMillis()
+    private fun ensureServiceRunning() {
         val currentTime = dateFormat.format(Date())
-
-        LogHelper.logValueDetection(value, node.text?.toString(), value == targetValue)
-
-        LogHelper.log(
-            """
-        [$currentTime] Iniciando verificação de clique
-        Valor: $value
-        Node inicial:
-        Text: ${node.text}
-        Class: ${node.className}
-        ViewId: ${node.viewIdResourceName}
-        Bounds: ${node.getBoundsInScreen(Rect())}
-        Is Clickable: ${node.isClickable}
-        Is Enabled: ${node.isEnabled}
-        Is Visible: ${node.isVisibleToUser}
-        Parent Class: ${node.parent?.className}
-        Child Count: ${node.childCount}
-    """.trimIndent()
-        )
-
-        if (!isNodeClickable(node)) {
-            val clickableParent = findClickableParent(node)
-            if (clickableParent == null) {
-                LogHelper.logClickAttempt(node, value, "Não Clicável", false)
-                LogHelper.log(
-                    """
-                [$currentTime] Elemento não clicável
-                Valor: $value
-                Node text: ${node.text}
-                Node class: ${node.className}
-                Node viewId: ${node.viewIdResourceName}
-                Is enabled: ${node.isEnabled}
-                Is visible: ${node.isVisibleToUser}
-            """.trimIndent()
-                )
-                showNotification("Valor $value encontrado, mas elemento não é clicável!")
-                return false
-            }
-            LogHelper.log("[$currentTime] Tentando com elemento pai clicável")
-            return tryClickAndVerify(clickableParent, value)
+        val prefs = getSharedPreferences("ValorLocator", MODE_PRIVATE)
+        if (prefs.getBoolean("is_searching", false)) {
+            isSearching = true
+            targetValue = prefs.getInt("target_value", 0)
+            monitorInstacart = prefs.getBoolean("monitor_instacart", false)
+            allowDuplicates = prefs.getBoolean("allow_duplicates", false)
+            Log.d(
+                TAG, """
+            [$currentTime] Restored search state:
+            Target: $targetValue
+            Monitor: $monitorInstacart
+            Allow Duplicates: $allowDuplicates
+        """.trimIndent()
+            )
+            handler.post(checkStateRunnable)
         }
-
-        var attempts = 0
-        val maxAttempts = MAX_CLICK_ATTEMPTS
-        val currentTimeMillis = System.currentTimeMillis()
-
-        if (currentTimeMillis - lastAttemptedClick < CLICK_TIMEOUT) {
-            clickAttempts++
-            if (clickAttempts >= maxAttempts) {
-                LogHelper.logClickAttempt(node, value, "Timeout", false)
-                LogHelper.log(
-                    """
-                [$currentTime] Muitas tentativas em curto período
-                Tentativas: $clickAttempts
-                Valor: $value
-                Timeout: $CLICK_TIMEOUT ms
-            """.trimIndent()
-                )
-                showNotification("Muitas tentativas de clique em $value. Aguardando...")
-                return false
-            }
-        } else {
-            clickAttempts = 0
-        }
-        lastAttemptedClick = currentTimeMillis
-
-        while (attempts < maxAttempts) {
-            attempts++
-            try {
-                LogHelper.log("[$currentTime] Tentativa $attempts de $maxAttempts")
-
-                // Tentativa de clique normal
-                if (performClickActions(node)) {
-                    Thread.sleep(200)
-                    LogHelper.logClickAttempt(node, value, "Normal Click", true)
-                    LogHelper.log(
-                        """
-                    [$currentTime] Clique normal bem sucedido
-                    Valor: $value
-                    Tentativa: $attempts
-                    Tempo total: ${System.currentTimeMillis() - startTime}ms
-                """.trimIndent()
-                    )
-                    showNotification("Clique bem sucedido no valor: $value")
-                    return true
-                }
-
-                // Se o clique normal falhar, tenta usar gestos
-                if (performGestureClick(node)) {
-                    Thread.sleep(200)
-                    LogHelper.logClickAttempt(node, value, "Gesture Click", true)
-                    LogHelper.log(
-                        """
-                    [$currentTime] Clique por gesto bem sucedido
-                    Valor: $value
-                    Tentativa: $attempts
-                    Tempo total: ${System.currentTimeMillis() - startTime}ms
-                """.trimIndent()
-                    )
-                    showNotification("Clique por gesto bem sucedido no valor: $value")
-                    return true
-                }
-
-                if (attempts < maxAttempts) {
-                    LogHelper.logClickAttempt(node, value, "Tentativa ${attempts}", false)
-                    LogHelper.log("[$currentTime] Tentativa $attempts falhou, aguardando 500ms")
-                    Thread.sleep(500)
-                }
-            } catch (e: Exception) {
-                LogHelper.logError("Tentativa de clique ${attempts}", e)
-                LogHelper.log(
-                    """
-                [$currentTime] Erro na tentativa $attempts
-                Valor: $value
-                Erro: ${e.message}
-                Stack: ${e.stackTraceToString()}
-            """.trimIndent()
-                )
-                if (attempts < maxAttempts) {
-                    Thread.sleep(500)
-                }
-            }
-        }
-
-        LogHelper.logClickAttempt(node, value, "Todas tentativas falharam", false)
-        LogHelper.log(
-            """
-        [$currentTime] Todas as tentativas falharam
-        Valor: $value
-        Total tentativas: $maxAttempts
-        Tempo total: ${System.currentTimeMillis() - startTime}ms
-    """.trimIndent()
-        )
-        showNotification("Falha ao clicar no valor $value após $maxAttempts tentativas")
-        return false
     }
+// PARTE 1 - FIM
 
     /*
-  * Parte 2: Eventos de acessibilidade e gerenciamento de janelas
-  * - Processamento de eventos
-  * - Gestão de janelas ativas
-  * - Cache de eventos
-  * - Manipulação de nós
-  * - Métodos auxiliares
-  */
+     * Current Date and Time (UTC): 2024-12-06 01:15:23
+     * Current User's Login: lefsilva79
+     *
+     * Parte 2: Eventos de acessibilidade e gerenciamento de janelas
+     */
 
     // Controle de estado da janela
     private var currentWindow: String? = null
     private var lastWindowChange = 0L
     private val windowCache = mutableMapOf<String, Long>()
     private val WINDOW_CACHE_TIMEOUT = 1000L // 1 segundo
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Log.d(TAG, "Service Connected")
+        instacartMonitor = InstacartMonitor(
+            service = this,
+            foundValues = foundValues,
+            targetValue = targetValue
+        )
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -640,17 +498,157 @@ class MyAccessibilityService : AccessibilityService() {
         Log.d(TAG, "[$currentTime] Service interrupted")
     }
 
+    fun tryClickAndVerify(node: AccessibilityNodeInfo, value: Int): Boolean {
+        val startTime = System.currentTimeMillis()
+        val currentTime = dateFormat.format(Date())
+
+        LogHelper.logValueDetection(value, node.text?.toString(), value == targetValue)
+
+        LogHelper.log(
+            """
+        [$currentTime] Iniciando verificação de clique
+        Valor: $value
+        Node inicial:
+        Text: ${node.text}
+        Class: ${node.className}
+        ViewId: ${node.viewIdResourceName}
+        Bounds: ${node.getBoundsInScreen(Rect())}
+        Is Clickable: ${node.isClickable}
+        Is Enabled: ${node.isEnabled}
+        Is Visible: ${node.isVisibleToUser}
+        Parent Class: ${node.parent?.className}
+        Child Count: ${node.childCount}
+    """.trimIndent()
+        )
+
+        if (!isNodeClickable(node)) {
+            val clickableParent = findClickableParent(node)
+            if (clickableParent == null) {
+                LogHelper.logClickAttempt(node, value, "Não Clicável", false)
+                LogHelper.log(
+                    """
+                [$currentTime] Elemento não clicável
+                Valor: $value
+                Node text: ${node.text}
+                Node class: ${node.className}
+                Node viewId: ${node.viewIdResourceName}
+                Is enabled: ${node.isEnabled}
+                Is visible: ${node.isVisibleToUser}
+            """.trimIndent()
+                )
+                showNotification("Valor $value encontrado, mas elemento não é clicável!")
+                return false
+            }
+            LogHelper.log("[$currentTime] Tentando com elemento pai clicável")
+            return tryClickAndVerify(clickableParent, value)
+        }
+
+        var attempts = 0
+        val maxAttempts = MAX_CLICK_ATTEMPTS
+        val currentTimeMillis = System.currentTimeMillis()
+
+        if (currentTimeMillis - lastAttemptedClick < CLICK_TIMEOUT) {
+            clickAttempts++
+            if (clickAttempts >= maxAttempts) {
+                LogHelper.logClickAttempt(node, value, "Timeout", false)
+                LogHelper.log(
+                    """
+                [$currentTime] Muitas tentativas em curto período
+                Tentativas: $clickAttempts
+                Valor: $value
+                Timeout: $CLICK_TIMEOUT ms
+            """.trimIndent()
+                )
+                showNotification("Muitas tentativas de clique em $value. Aguardando...")
+                return false
+            }
+        } else {
+            clickAttempts = 0
+        }
+        lastAttemptedClick = currentTimeMillis
+
+        while (attempts < maxAttempts) {
+            attempts++
+            try {
+                LogHelper.log("[$currentTime] Tentativa $attempts de $maxAttempts")
+
+                // Tentativa de clique normal
+                if (performClickActions(node)) {
+                    Thread.sleep(200)
+                    LogHelper.logClickAttempt(node, value, "Normal Click", true)
+                    LogHelper.log(
+                        """
+                    [$currentTime] Clique normal bem sucedido
+                    Valor: $value
+                    Tentativa: $attempts
+                    Tempo total: ${System.currentTimeMillis() - startTime}ms
+                """.trimIndent()
+                    )
+                    showNotification("Clique bem sucedido no valor: $value")
+                    return true
+                }
+
+                // Se o clique normal falhar, tenta usar gestos
+                if (performGestureClick(node)) {
+                    Thread.sleep(200)
+                    LogHelper.logClickAttempt(node, value, "Gesture Click", true)
+                    LogHelper.log(
+                        """
+                    [$currentTime] Clique por gesto bem sucedido
+                    Valor: $value
+                    Tentativa: $attempts
+                    Tempo total: ${System.currentTimeMillis() - startTime}ms
+                """.trimIndent()
+                    )
+                    showNotification("Clique por gesto bem sucedido no valor: $value")
+                    return true
+                }
+
+                if (attempts < maxAttempts) {
+                    LogHelper.logClickAttempt(node, value, "Tentativa ${attempts}", false)
+                    LogHelper.log("[$currentTime] Tentativa $attempts falhou, aguardando 500ms")
+                    Thread.sleep(500)
+                }
+            } catch (e: Exception) {
+                LogHelper.logError("Tentativa de clique ${attempts}", e)
+                LogHelper.log(
+                    """
+                [$currentTime] Erro na tentativa $attempts
+                Valor: $value
+                Erro: ${e.message}
+                Stack: ${e.stackTraceToString()}
+            """.trimIndent()
+                )
+                if (attempts < maxAttempts) {
+                    Thread.sleep(500)
+                }
+            }
+        }
+
+        LogHelper.logClickAttempt(node, value, "Todas tentativas falharam", false)
+        LogHelper.log(
+            """
+        [$currentTime] Todas as tentativas falharam
+        Valor: $value
+        Total tentativas: $maxAttempts
+        Tempo total: ${System.currentTimeMillis() - startTime}ms
+    """.trimIndent()
+        )
+        showNotification("Falha ao clicar no valor $value após $maxAttempts tentativas")
+        return false
+    }
+// PARTE 2 - FIM
+
     /*
- * MyAccessibilityService.kt
- * Current Date and Time (UTC): 2024-12-05 02:35:13
- * Current User's Login: lefsilva79
- *
- * Parte 3: Gerenciamento de estado e monitoramento
- * - Controle do estado de busca
- * - Gestão de valores encontrados
- * - Sistema de broadcast de estado
- * - Métodos de controle de monitoramento
- */
+     * Current Date and Time (UTC): 2024-12-06 01:16:11
+     * Current User's Login: lefsilva79
+     *
+     * Parte 3: Gerenciamento de estado e monitoramento
+     * - Controle do estado de busca
+     * - Gestão de valores encontrados
+     * - Sistema de broadcast de estado
+     * - Métodos de controle de monitoramento
+     */
 
     fun startSearching(value: Int) {
         val currentTime = dateFormat.format(Date())
@@ -665,7 +663,7 @@ class MyAccessibilityService : AccessibilityService() {
         foundValues.clear()
 
         // Salva o estado
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("is_searching", true)
             .putInt("target_value", value)
@@ -698,7 +696,7 @@ class MyAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(checkStateRunnable)
 
         // Limpa o estado
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("is_searching", false)
             .putInt("target_value", 0)
@@ -779,26 +777,28 @@ class MyAccessibilityService : AccessibilityService() {
         return Triple(isSearching, targetValue, foundValues.toSet())
     }
 
-    @SuppressLint("UnsafeImplicitIntentLaunch")
+
     private fun broadcastSearchState(isSearching: Boolean) {
         val currentTime = dateFormat.format(Date())
-        Intent(SEARCH_STATE_ACTION).also { intent ->
+
+        // Criar Intent explícito
+            Intent(applicationContext, SearchStateReceiver::class.java).also { intent ->
+            intent.action = SEARCH_STATE_ACTION
             intent.putExtra("is_searching", isSearching)
             intent.putExtra("target_value", targetValue)
             intent.putExtra("found_count", foundValues.size)
             intent.putExtra("timestamp", System.currentTimeMillis())
             sendBroadcast(intent)
-        }
 
-        Log.d(
-            TAG, """
-            [$currentTime] Search state broadcast
-            Is searching: $isSearching
-            Target value: $targetValue
-            Found count: ${foundValues.size}
-        """.trimIndent()
-        )
+            LogHelper.logEvent("""
+            [$currentTime] Broadcasting search state:
+            Searching: $isSearching
+            Target: $targetValue
+            Found: ${foundValues.size}
+        """.trimIndent())
+        }
     }
+
 
     fun isServiceActive(): Boolean {
         return serviceStarted
@@ -807,7 +807,7 @@ class MyAccessibilityService : AccessibilityService() {
     fun setServiceStarted(started: Boolean) {
         val currentTime = dateFormat.format(Date())
         serviceStarted = started
-        getSharedPreferences("ValorLocator", Context.MODE_PRIVATE)
+        getSharedPreferences("ValorLocator", MODE_PRIVATE)
             .edit()
             .putBoolean("service_started", started)
             .apply()
@@ -822,121 +822,7 @@ class MyAccessibilityService : AccessibilityService() {
         )
     }
 
-    /*
- * MyAccessibilityService.kt
- * Current Date and Time (UTC): 2024-12-05 02:35:59
- * Current User's Login: lefsilva79
- *
- * Parte 4: Extensões do serviço e utilitários
- * - Funções de extensão
- * - Métodos auxiliares
- * - Utilitários de formatação
- * - Funções de depuração
- */
-
-    private fun findNodesByText(
-        rootNode: AccessibilityNodeInfo?,
-        text: String,
-        exactMatch: Boolean = true
-    ): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-        if (rootNode == null) return nodes
-
-        val searchText = text.trim()
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(rootNode)
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            val nodeText = node.text?.toString()?.trim()
-
-            if (nodeText != null) {
-                val matches = if (exactMatch) {
-                    nodeText == searchText
-                } else {
-                    nodeText.contains(searchText, ignoreCase = true)
-                }
-
-                if (matches) {
-                    nodes.add(node)
-                }
-            }
-
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
-            }
-        }
-
-        return nodes
-    }
-
-    private fun findNodesByClassName(
-        rootNode: AccessibilityNodeInfo?,
-        className: String,
-        partialMatch: Boolean = false
-    ): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-        if (rootNode == null) return nodes
-
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(rootNode)
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            val nodeClassName = node.className?.toString()
-
-            if (nodeClassName != null) {
-                val matches = if (partialMatch) {
-                    nodeClassName.contains(className, ignoreCase = true)
-                } else {
-                    nodeClassName == className
-                }
-
-                if (matches) {
-                    nodes.add(node)
-                }
-            }
-
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
-            }
-        }
-
-        return nodes
-    }
-
-    private fun dumpNodeHierarchy(
-        node: AccessibilityNodeInfo?,
-        depth: Int = 0,
-        maxDepth: Int = 10
-    ): String {
-        if (node == null || depth > maxDepth) return ""
-
-        val indent = "  ".repeat(depth)
-        val builder = StringBuilder()
-
-        builder.append(
-            """
-            $indent${node.className}
-            ${indent}Text: ${node.text}
-            ${indent}Description: ${node.contentDescription}
-            ${indent}Id: ${node.viewIdResourceName}
-            ${indent}Clickable: ${node.isClickable}
-            ${indent}Enabled: ${node.isEnabled}
-            ${indent}Visible: ${node.isVisibleToUser}
-            ${indent}Bounds: ${node.getBoundsInScreen(Rect())}
-        """.trimIndent()
-        )
-
-        for (i in 0 until node.childCount) {
-            builder.append("\n${dumpNodeHierarchy(node.getChild(i), depth + 1, maxDepth)}")
-        }
-
-        return builder.toString()
-    }
-
     fun getClickAttempts(): Int {
         return clickAttempts
     }
 }
-

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   AndroidManifest.xml
-  Current Date and Time (UTC): 2024-12-05 05:05:49
+  Current Date and Time (UTC): 2024-12-06 06:18:40
   Current User's Login: lefsilva79
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -51,6 +51,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".TestActivity"
+            android:exported="true"
+            android:launchMode="singleTask" />
+
+        <activity
+            android:name=".TestBatchActivity"
+            android:exported="true"
+            android:launchMode="singleTask" />
 
         <activity
             android:name=".SetupWizardActivity"
