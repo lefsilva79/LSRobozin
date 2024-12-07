@@ -41,7 +41,20 @@ class InstacartMonitor(
  * Current User's Login: lefsilva79
  */
 
+    /*
+ * InstacartMonitor.kt
+ * Current Date and Time (UTC): 2024-12-06 16:47:10
+ * Current User's Login: lefsilva79
+ */
+
     override fun searchValues(node: AccessibilityNodeInfo, nodeText: String) {
+        // Verifica se é o Instacart
+        val packageName = node.packageName?.toString()
+        if (!packageName?.contains("instacart", ignoreCase = true)!!) {
+            LogHelper.logEvent("Ignorando package que não é Instacart: $packageName")
+            return
+        }
+
         LogHelper.log("""
         === INÍCIO DO SEARCHVALUES ===
         Monitor enabled: $enabled
@@ -92,6 +105,60 @@ class InstacartMonitor(
             }
         }
     }
+
+    /* VERSÃO ANTERIOR (permite detecção em qualquer app)
+    override fun searchValues(node: AccessibilityNodeInfo, nodeText: String) {
+        LogHelper.log("""
+            === INÍCIO DO SEARCHVALUES ===
+            Monitor enabled: $enabled
+            Target Value: $targetValue
+            Node Package: ${node.packageName}
+            Node Class: ${node.className}
+            Node Text: $nodeText
+            AutoClick: $autoClickEnabled
+        """.trimIndent())
+
+        if (!enabled) {
+            LogHelper.logEvent("Monitor está desabilitado, retornando...")
+            return
+        }
+
+        foundValues.clear()
+        val currentTime = dateFormat.format(Date())
+
+        // Testa o node recebido diretamente
+        node.text?.toString()?.let { text ->
+            LogHelper.logEvent("Analisando texto do node principal: '$text'")
+            if (text.contains("$")) {
+                LogHelper.logEvent("$ encontrado no node principal: $text")
+                searchInText(text, MONEY_PATTERN, node)
+            }
+        }
+
+        // Busca em todos os children
+        val textViews = findNodesByClassName(node, TEXTVIEW_CLASS)
+        val editTexts = findNodesByClassName(node, EDITTEXT_CLASS)
+
+        LogHelper.log("""
+            Elementos encontrados:
+            TextViews: ${textViews.size}
+            EditTexts: ${editTexts.size}
+            Package: ${node.packageName}
+        """.trimIndent())
+
+        (textViews + editTexts).forEach { foundNode ->
+            foundNode.text?.toString()?.let { text ->
+                LogHelper.logEvent("Analisando elemento: '$text'")
+                if (text.contains("$") && text.indexOf("$").let { i ->
+                        i < text.length - 1 && text[i + 1].isDigit()
+                    }) {
+                    LogHelper.logEvent("Padrão $ + número encontrado: $text")
+                    searchInText(text, MONEY_PATTERN, foundNode)
+                }
+            }
+        }
+    }
+    */
 
     private fun searchInText(text: String, pattern: Regex, node: AccessibilityNodeInfo) {
         try {

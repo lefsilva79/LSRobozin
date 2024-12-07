@@ -526,15 +526,98 @@ class MyAccessibilityService : AccessibilityService() {
     private fun isNodeClickable(node: AccessibilityNodeInfo?): Boolean {
         if (node == null) return false
 
+        return try {
+            node.isClickable ||
+                    (node.isEnabled && (
+                            node.className?.toString()?.lowercase()?.let { className ->
+                                className.contains("button") ||
+                                        className.contains("textview") ||
+                                        className.contains("imageview") ||
+                                        className.contains("linearlayout") ||
+                                        className.contains("relativelayout") ||
+                                        className.contains("cardview")
+                            } == true ||
+                                    node.viewIdResourceName?.lowercase()?.let { id ->
+                                        id.contains("btn") ||
+                                                id.contains("button") ||
+                                                id.contains("click") ||
+                                                id.contains("select") ||
+                                                id.contains("card")
+                                    } == true
+                            )) &&
+                    !node.isScrollable &&
+                    node.isVisibleToUser &&
+                    isNodeOnScreen(node)
+        } catch (e: Exception) {
+            LogHelper.logError("Erro verificando se node é clicável", e)
+            false
+        }
+    }
+
+    private fun isNodeOnScreen(node: AccessibilityNodeInfo): Boolean {
+        try {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+
+            return rect.left >= 0 &&
+                    rect.top >= 0 &&
+                    rect.right <= screenWidth &&
+                    rect.bottom <= screenHeight &&
+                    rect.width() > 0 &&
+                    rect.height() > 0
+        } catch (e: Exception) {
+            LogHelper.logError("Erro verificando se node está na tela", e)
+            return false
+        }
+    }
+
+    /*private fun isNodeClickable(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+
         val isNotEditText = node.className?.contains("android.widget.EditText", true)?.not() ?: true
 
         return node.isClickable &&
                 node.isEnabled &&
                 node.isVisibleToUser &&
                 isNotEditText
-    }
+    }*/
 
     private fun findClickableParent(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+
+        try {
+            var current = node
+            var maxAttempts = 5
+            var previousNode: AccessibilityNodeInfo? = null
+
+            while (current != null && maxAttempts > 0) {
+                if (isNodeClickable(current)) {
+                    if (isNodeOnScreen(current)) {
+                        return current
+                    }
+                }
+                previousNode = current
+                current = current.parent
+                if (current != previousNode) {
+                    previousNode.recycle()
+                }
+                maxAttempts--
+            }
+        } catch (e: Exception) {
+            LogHelper.logError("""
+            Erro ao buscar parent clicável
+            Node text: ${node.text}
+            Node class: ${node.className}
+        """.trimIndent(), e)
+        }
+        return null
+    }
+
+    /*private fun findClickableParent(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         var current = node
         val maxDepth = 5
         var depth = 0
@@ -547,9 +630,61 @@ class MyAccessibilityService : AccessibilityService() {
             depth++
         }
         return null
+    }*/
+    private fun performClickActions(node: AccessibilityNodeInfo): Boolean {
+        try {
+            // Primeiro tenta o clique direto
+            if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                LogHelper.logEvent("Clique direto bem sucedido")
+                return true
+            }
+
+            // Se falhar, tenta dar foco primeiro e depois clicar
+            if (node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
+                Thread.sleep(100)
+                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    LogHelper.logEvent("Clique após foco bem sucedido")
+                    return true
+                }
+            }
+
+            // Se ainda falhar, tenta o clique por gesto
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+
+            if (rect.width() > 0 && rect.height() > 0) {
+                val clickPath = Path()
+                clickPath.moveTo(rect.centerX().toFloat(), rect.centerY().toFloat())
+
+                val gestureBuilder = GestureDescription.Builder()
+                val gestureDescription = gestureBuilder
+                    .addStroke(GestureDescription.StrokeDescription(clickPath, 0, 1))
+                    .build()
+
+                var gestureResult = false
+                dispatchGesture(gestureDescription, object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        LogHelper.logEvent("Gesto de clique completado")
+                        gestureResult = true
+                    }
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        LogHelper.logEvent("Gesto de clique cancelado")
+                        gestureResult = false
+                    }
+                }, null)
+
+                Thread.sleep(500) // Espera o gesto completar
+                return gestureResult
+            }
+
+            return false
+        } catch (e: Exception) {
+            LogHelper.logError("Erro ao executar ações de clique", e)
+            return false
+        }
     }
 
-    private fun performClickActions(node: AccessibilityNodeInfo): Boolean {
+    /*private fun performClickActions(node: AccessibilityNodeInfo): Boolean {
         return node.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
                 node.performAction(AccessibilityNodeInfo.ACTION_SELECT)
     }
@@ -571,7 +706,7 @@ class MyAccessibilityService : AccessibilityService() {
             .build()
 
         return dispatchGesture(gesture, null, null)
-    }
+    }*/
 
     override fun onInterrupt() {
         val currentTime = dateFormat.format(Date())
@@ -579,6 +714,172 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     fun tryClickAndVerify(node: AccessibilityNodeInfo, value: Int): Boolean {
+        val startTime = System.currentTimeMillis()
+        val currentTime = dateFormat.format(Date())
+
+        LogHelper.logValueDetection(value, node.text?.toString(), value == targetValue)
+
+        LogHelper.log("""
+        [$currentTime] Iniciando verificação de clique
+        Valor: $value
+        Node inicial:
+        Text: ${node.text}
+        Class: ${node.className}
+        ViewId: ${node.viewIdResourceName}
+        Bounds: ${node.getBoundsInScreen(Rect())}
+        Is Clickable: ${node.isClickable}
+        Is Enabled: ${node.isEnabled}
+        Is Visible: ${node.isVisibleToUser}
+        Parent Class: ${node.parent?.className}
+        Child Count: ${node.childCount}
+    """.trimIndent())
+
+        if (!isNodeClickable(node)) {
+            val clickableParent = findClickableParent(node)
+            if (clickableParent == null) {
+                LogHelper.logClickAttempt(node, value, "Não Clicável", false)
+                LogHelper.log("""
+                [$currentTime] Elemento não clicável
+                Valor: $value
+                Node text: ${node.text}
+                Node class: ${node.className}
+                Node viewId: ${node.viewIdResourceName}
+                Is enabled: ${node.isEnabled}
+                Is visible: ${node.isVisibleToUser}
+            """.trimIndent())
+                showNotification("Valor $value encontrado, mas elemento não é clicável!")
+                return false
+            }
+            LogHelper.log("[$currentTime] Tentando com elemento pai clicável")
+            return tryClickAndVerify(clickableParent, value)
+        }
+
+        var attempts = 0
+        val maxAttempts = MAX_CLICK_ATTEMPTS
+        val currentTimeMillis = System.currentTimeMillis()
+
+        if (currentTimeMillis - lastAttemptedClick < CLICK_TIMEOUT) {
+            clickAttempts++
+            if (clickAttempts >= maxAttempts) {
+                LogHelper.logClickAttempt(node, value, "Timeout", false)
+                LogHelper.log("""
+                [$currentTime] Muitas tentativas em curto período
+                Tentativas: $clickAttempts
+                Valor: $value
+                Timeout: $CLICK_TIMEOUT ms
+            """.trimIndent())
+                showNotification("Muitas tentativas de clique em $value. Aguardando...")
+                return false
+            }
+        } else {
+            clickAttempts = 0
+        }
+        lastAttemptedClick = currentTimeMillis
+
+        while (attempts < maxAttempts) {
+            attempts++
+            try {
+                LogHelper.log("[$currentTime] Tentativa $attempts de $maxAttempts")
+
+                // Tentativa de clique direto
+                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    Thread.sleep(200)
+                    LogHelper.logClickAttempt(node, value, "Direct Click", true)
+                    LogHelper.log("""
+                    [$currentTime] Clique direto bem sucedido
+                    Valor: $value
+                    Tentativa: $attempts
+                    Tempo total: ${System.currentTimeMillis() - startTime}ms
+                """.trimIndent())
+                    showNotification("Clique bem sucedido no valor: $value")
+                    return true
+                }
+
+                // Tenta dar foco primeiro
+                if (node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
+                    Thread.sleep(100)
+                    if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                        LogHelper.logClickAttempt(node, value, "Focus+Click", true)
+                        LogHelper.log("""
+                        [$currentTime] Clique após foco bem sucedido
+                        Valor: $value
+                        Tentativa: $attempts
+                        Tempo total: ${System.currentTimeMillis() - startTime}ms
+                    """.trimIndent())
+                        showNotification("Clique bem sucedido no valor: $value")
+                        return true
+                    }
+                }
+
+                // Se ainda não conseguiu, tenta o gesto
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+
+                if (rect.width() > 0 && rect.height() > 0) {
+                    val clickPath = Path()
+                    clickPath.moveTo(rect.centerX().toFloat(), rect.centerY().toFloat())
+
+                    val gestureBuilder = GestureDescription.Builder()
+                    val gestureDescription = gestureBuilder
+                        .addStroke(GestureDescription.StrokeDescription(clickPath, 0, 1))
+                        .build()
+
+                    var gestureResult = false
+                    dispatchGesture(gestureDescription, object : GestureResultCallback() {
+                        override fun onCompleted(gestureDescription: GestureDescription?) {
+                            gestureResult = true
+                            LogHelper.logClickAttempt(node, value, "Gesture Click", true)
+                        }
+                        override fun onCancelled(gestureDescription: GestureDescription?) {
+                            gestureResult = false
+                            LogHelper.logClickAttempt(node, value, "Gesture Cancelled", false)
+                        }
+                    }, null)
+
+                    Thread.sleep(500)
+                    if (gestureResult) {
+                        LogHelper.log("""
+                        [$currentTime] Clique por gesto bem sucedido
+                        Valor: $value
+                        Tentativa: $attempts
+                        Tempo total: ${System.currentTimeMillis() - startTime}ms
+                    """.trimIndent())
+                        showNotification("Clique por gesto bem sucedido no valor: $value")
+                        return true
+                    }
+                }
+
+                if (attempts < maxAttempts) {
+                    LogHelper.logClickAttempt(node, value, "Tentativa ${attempts}", false)
+                    LogHelper.log("[$currentTime] Tentativa $attempts falhou, aguardando 500ms")
+                    Thread.sleep(500)
+                }
+            } catch (e: Exception) {
+                LogHelper.logError("Tentativa de clique ${attempts}", e)
+                LogHelper.log("""
+                [$currentTime] Erro na tentativa $attempts
+                Valor: $value
+                Erro: ${e.message}
+                Stack: ${e.stackTraceToString()}
+            """.trimIndent())
+                if (attempts < maxAttempts) {
+                    Thread.sleep(500)
+                }
+            }
+        }
+
+        LogHelper.logClickAttempt(node, value, "Todas tentativas falharam", false)
+        LogHelper.log("""
+        [$currentTime] Todas as tentativas falharam
+        Valor: $value
+        Total tentativas: $maxAttempts
+        Tempo total: ${System.currentTimeMillis() - startTime}ms
+    """.trimIndent())
+        showNotification("Falha ao clicar no valor $value após $maxAttempts tentativas")
+        return false
+    }
+
+    /*fun tryClickAndVerify(node: AccessibilityNodeInfo, value: Int): Boolean {
         val startTime = System.currentTimeMillis()
         val currentTime = dateFormat.format(Date())
 
@@ -716,7 +1017,7 @@ class MyAccessibilityService : AccessibilityService() {
         )
         showNotification("Falha ao clicar no valor $value após $maxAttempts tentativas")
         return false
-    }
+    }*/
 // PARTE 2 - FIM
 
     /*
